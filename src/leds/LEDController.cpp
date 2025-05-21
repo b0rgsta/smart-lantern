@@ -28,8 +28,6 @@ void LEDController::clearAll() {
   stripInner.clear();
   stripOuter.clear();
   stripRing.clear();
-  
-  showAll();
 }
 
 void LEDController::showAll() {
