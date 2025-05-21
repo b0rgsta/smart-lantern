@@ -28,5 +28,5 @@ void loop() {
     lantern.update();
 
     // Small delay for animation speed
-    delay(20);
+    delay(10);
 }

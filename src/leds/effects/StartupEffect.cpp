@@ -26,7 +26,7 @@ void StartupEffect::update() {
                      
     if (position >= maxPosition) {
         // Animation finished
-        delay(500);
+        delay(100);
         leds.clearAll();
         complete = true;
         return;

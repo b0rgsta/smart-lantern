@@ -253,7 +253,7 @@ void SmartLantern::processTouchInputs() {
 void SmartLantern::handleAutoLighting() {
   int lightLevel = sensors.getLightLevel();
   bool isLowLight = false;
-  
+
   // Determine light threshold based on lightButtonState
   switch (lightButtonState) {
     case 1: // High sensitivity
