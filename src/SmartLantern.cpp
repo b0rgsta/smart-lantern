@@ -1,8 +1,14 @@
-/*
- * SmartLantern.cpp - Implementation of the SmartLantern class
- */
+// src/SmartLantern.cpp
 
 #include "SmartLantern.h"
+
+#include "leds/effects/StartupEffect.h"
+#include "leds/effects/TrailsEffect.h"
+#include "leds/effects/RainbowEffect.h"
+#include "leds/effects/FireEffect.h"
+#include "leds/effects/MatrixEffect.h"
+#include "leds/effects/AcceleratingTrailsEffect.h"
+#include "leds/effects/SolidColorEffect.h"
 
 SmartLantern::SmartLantern() :
   isPowerOn(false),
@@ -13,29 +19,67 @@ SmartLantern::SmartLantern() :
   lightButtonState(0),
   powerButtonPressTime(0),
   lowLightStartTime(0),
-  autoOnTime(0),
-  currentEffectPtr(nullptr)
+  autoOnTime(0)
 {
-  // Create effects
-  startupEffect = new StartupEffect(leds);
-  trailsEffect = new TrailsEffect(leds);
-  rainbowEffect = new RainbowEffect(leds);
-  fireEffect = new FireEffect(leds);
-  matrixEffect = new MatrixEffect(leds);  // Initialize the new effect
-  acceleratingTrailsEffect = new AcceleratingTrailsEffect(leds);
+  // Initialize the effects vector structure
+  effects.resize(5); // One vector for each mode (0-4)
 
-  // Set default effect
-  currentEffectPtr = trailsEffect;
+  // Create special effects that need direct access
+  startupEffect = new StartupEffect(leds);
+  fireEffectPtr = new FireEffect(leds);
+
+  // Call helper to initialize all effects
+  initializeEffects();
 }
 
 SmartLantern::~SmartLantern() {
-  // Clean up effects
-  delete startupEffect;
-  delete trailsEffect;
-  delete rainbowEffect;
-  delete fireEffect;
-  delete matrixEffect;  // Clean up the new effect
-  delete acceleratingTrailsEffect;
+  // Clean up all effects
+  for (auto& modeEffects : effects) {
+    for (auto effect : modeEffects) {
+      delete effect;
+    }
+  }
+  // The fireEffectPtr is just a reference, it's already deleted in the loop above
+}
+
+void SmartLantern::initializeEffects() {
+  // Create the effect instances
+  auto startupEffect = new StartupEffect(leds);
+  auto trailsEffect = new TrailsEffect(leds);
+  auto rainbowEffect = new RainbowEffect(leds);
+  auto fireEffect = new FireEffect(leds);
+  auto matrixEffect = new MatrixEffect(leds);
+  auto acceleratingTrailsEffect = new AcceleratingTrailsEffect(leds);
+
+  // Store a reference to the fire effect for temperature override
+  fireEffectPtr = fireEffect;
+
+  auto whiteEffect = new SolidColorEffect(leds, leds.color(255, 255, 255)); // White
+  auto warmWhiteEffect = new SolidColorEffect(leds, leds.color(255, 200, 100)); // Warm white
+
+  // MODE_OFF - empty
+
+  // MODE_AMBIENT
+  effects[MODE_AMBIENT].push_back(whiteEffect);             // Pure white
+  effects[MODE_AMBIENT].push_back(warmWhiteEffect);         // Warm white
+  effects[MODE_AMBIENT].push_back(rainbowEffect);           // Rainbow
+  effects[MODE_AMBIENT].push_back(matrixEffect);            // Matrix effect
+
+  // MODE_GRADIENT
+  effects[MODE_GRADIENT].push_back(rainbowEffect);          // Rainbow cycle
+
+  // MODE_ANIMATED
+  effects[MODE_ANIMATED].push_back(fireEffect);             // Fire effect
+  effects[MODE_ANIMATED].push_back(trailsEffect);           // Trails effect
+  effects[MODE_ANIMATED].push_back(matrixEffect);           // Matrix effect
+  effects[MODE_ANIMATED].push_back(acceleratingTrailsEffect); // Accelerating trails
+  effects[MODE_ANIMATED].push_back(rainbowEffect);          // Rainbow effect
+
+  // MODE_PARTY
+  effects[MODE_PARTY].push_back(rainbowEffect);             // Rainbow
+  effects[MODE_PARTY].push_back(trailsEffect);              // Trails
+  effects[MODE_PARTY].push_back(matrixEffect);              // Matrix
+  effects[MODE_PARTY].push_back(acceleratingTrailsEffect);  // Accelerating trails
 }
 
 void SmartLantern::begin() {
@@ -52,25 +96,58 @@ void SmartLantern::begin() {
     Serial.println("WARNING: Some sensors failed to initialize");
   }
 
-  // Show startup animation
-  while (!startupEffect->isComplete()) {
-    startupEffect->update();
+  // Initialize preferences for persistent storage
+  preferences.begin("lantern", false); // "lantern" is the namespace
+
+  // Load saved settings with sensible defaults
+  LanternMode savedMode = (LanternMode)preferences.getUChar("mode", MODE_AMBIENT);
+  int savedEffect = preferences.getUChar("effect", 0);
+  tempButtonState = preferences.getUChar("tempBtn", 0);
+  lightButtonState = preferences.getUChar("lightBtn", 0);
+
+  // Start with power off until startup completes
+  isPowerOn = false;
+
+  // Show startup animation first
+  this->startupEffect->reset(); // Reset the startup effect first
+  while (!this->startupEffect->isComplete()) {
+    this->startupEffect->update();
     delay(20);
   }
-  
+
+  // Now set the power on and restore previous mode/effect (or defaults)
+  isPowerOn = true;
+
+  // Set mode and effect (default to Ambient white if no valid saved data)
+  if (savedMode >= MODE_OFF && savedMode <= MODE_PARTY) {
+    currentMode = savedMode;
+  } else {
+    currentMode = MODE_AMBIENT; // Default to Ambient
+  }
+
+  if (savedEffect >= 0 && savedEffect <= 4) {
+    currentEffect = savedEffect;
+  } else {
+    currentEffect = 0; // Default to first effect (white for Ambient mode)
+  }
+
   Serial.println("Smart Lantern Ready!");
+  Serial.print("Restored mode: ");
+  Serial.print(currentMode);
+  Serial.print(", effect: ");
+  Serial.println(currentEffect);
 }
 
 void SmartLantern::update() {
   // Update sensors
   sensors.update();
-  
+
   // Process user inputs
   processTouchInputs();
-  
+
   // Handle auto on/off based on light sensor
   handleAutoLighting();
-  
+
   // Update the current effect
   updateEffects();
 }
@@ -79,10 +156,26 @@ void SmartLantern::setMode(LanternMode mode) {
   if (mode != currentMode) {
     currentMode = mode;
     currentEffect = 0;  // Reset effect when mode changes
-    
+
+    // Save to persistent storage
+    preferences.putUChar("mode", currentMode);
+    preferences.putUChar("effect", currentEffect);
+
     Serial.print("Mode changed to: ");
     Serial.println(currentMode);
   }
+}
+
+void SmartLantern::nextEffect() {
+  // Effects are mode-dependent, so number will vary
+  // For simplicity, we'll cycle through 0-4 for all modes
+  currentEffect = (currentEffect + 1) % 5;
+
+  // Save effect to persistent storage
+  preferences.putUChar("effect", currentEffect);
+
+  Serial.print("Effect changed to: ");
+  Serial.println(currentEffect);
 }
 
 void SmartLantern::nextMode() {
@@ -90,24 +183,18 @@ void SmartLantern::nextMode() {
   currentMode = static_cast<LanternMode>((currentMode % 4) + 1);
   currentEffect = 0;  // Reset effect when mode changes
 
+  // Save mode and effect to persistent storage
+  preferences.putUChar("mode", currentMode);
+  preferences.putUChar("effect", currentEffect);
+
   String modeNames[] = {"OFF", "AMBIENT", "GRADIENT", "ANIMATED", "PARTY"};
-
   Serial.print("Mode changed to: " + modeNames[currentMode]);
-}
-
-void SmartLantern::nextEffect() {
-  // Effects are mode-dependent, so number will vary
-  // For simplicity, we'll cycle through 0-3 for all modes
-  currentEffect = (currentEffect + 1) % 5;
-  
-  Serial.print("Effect changed to: ");
-  Serial.println(currentEffect);
 }
 
 void SmartLantern::setPower(bool on) {
   if (on != isPowerOn) {
     isPowerOn = on;
-    
+
     if (isPowerOn) {
       // Turn on - set to default mode
       currentMode = MODE_ANIMATED;
@@ -117,7 +204,7 @@ void SmartLantern::setPower(bool on) {
       currentMode = MODE_OFF;
       leds.clearAll();
     }
-    
+
     Serial.print("Power turned ");
     Serial.println(isPowerOn ? "ON" : "OFF");
   }
@@ -130,119 +217,44 @@ void SmartLantern::togglePower() {
 void SmartLantern::updateEffects() {
   // Don't update effects if power is off
   if (!isPowerOn && !isAutoOn) return;
-  
+
   // Check for temperature override
   float currentTemp = sensors.getTemperature();
   if (tempButtonState > 0 && currentTemp <= TEMP_THRESHOLD_RED) {
-    fireEffect->update();
-    return;
-  }
-  
-  // Otherwise, update the current effect based on mode
-  switch (currentMode) {
-    case MODE_OFF:
-      // All LEDs off
-      leds.clearAll();
-      break;
-      
-    case MODE_AMBIENT:
-      // Choose effect based on currentEffect
-      if (currentEffect == 0) {
-        // Solid color
-        uint32_t color = leds.getCore().Color(255, 255, 255);  // White
-        for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
-          leds.getCore().setPixelColor(i, color);
-        }
-        for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
-          leds.getInner().setPixelColor(i, color);
-        }
-        for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
-          leds.getOuter().setPixelColor(i, color);
-        }
-        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
-          leds.getRing().setPixelColor(i, color);
-        }
-        leds.showAll();
-      } else if (currentEffect == 1) {
-        // Dim warm white
-        uint32_t warmColor = leds.getCore().Color(255, 200, 100);
-        for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
-          leds.getCore().setPixelColor(i, warmColor);
-        }
-        for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
-          leds.getInner().setPixelColor(i, warmColor);
-        }
-        for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
-          leds.getOuter().setPixelColor(i, warmColor);
-        }
-        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
-          leds.getRing().setPixelColor(i, warmColor);
-        }
-        leds.showAll();
-      } else if (currentEffect == 2) {
-        // Rainbow effect
-        rainbowEffect->update();
-      } else {
-        // Matrix effect (new)
-        matrixEffect->update();
-      }
-      break;
-
-    case MODE_GRADIENT:
-      // Rainbow cycle effect
-      rainbowEffect->update();
-      break;
-
-    case MODE_ANIMATED:
-      // Various animated effects
-      if (currentEffect == 0) {
+    // Find the fire effect in MODE_ANIMATED
+    for (auto effect : effects[MODE_ANIMATED]) {
+      auto fireEffect = (FireEffect*)(effect);
+      if (fireEffect) {
         fireEffect->update();
-      } else if (currentEffect == 1) {
-        trailsEffect->update();
-      } else if (currentEffect == 2) {
-        matrixEffect->update();
-      } else if (currentEffect == 3) {
-        acceleratingTrailsEffect->update();
-      } else {
-        rainbowEffect->update();
+        return;
       }
-      break;
+    }
+  }
 
-    case MODE_PARTY:
-      // Party effects
-      if (currentEffect == 0) {
-        rainbowEffect->update();
-      } else if (currentEffect == 1) {
-        trailsEffect->update();
-      } else if (currentEffect == 2) {
-        matrixEffect->update();  // Use the matrix effect
-      } else {
-        // Alternating effects for party mode
-        static unsigned long lastSwitch = 0;
-        if (millis() - lastSwitch > 5000) {  // Switch every 5 seconds
-          lastSwitch = millis();
-          static int partyEffect = 0;
-          partyEffect = (partyEffect + 1) % 3;
+  // If powered and in a valid mode with effects
+  if (currentMode != MODE_OFF && effects[currentMode].size() > 0) {
+    // Use the current effect for this mode
+    // Ensure currentEffect is within bounds
+    if (currentEffect < 0 || currentEffect >= effects[currentMode].size()) {
+      currentEffect = 0;
+    }
 
-          if (partyEffect == 0) {
-            rainbowEffect->update();
-          } else if (partyEffect == 1) {
-            trailsEffect->update();
-          } else {
-            matrixEffect->update();
-          }
-        }
-      }
-      break;
+    // Update the current effect
+    effects[currentMode][currentEffect]->update();
+  } else {
+    // All LEDs off for MODE_OFF
+    leds.clearAll();
   }
 }
-
-// This is just the relevant part of SmartLantern.cpp that needs updating
 
 void SmartLantern::processTouchInputs() {
   // Check for temperature button
   if (sensors.isNewTouch(TEMP_BUTTON_CHANNEL)) {
     tempButtonState = (tempButtonState + 1) % 4;  // Cycle through states 0-3
+
+    // Save temperature button state
+    preferences.putUChar("tempBtn", tempButtonState);
+
     Serial.print("Temperature button state: ");
     Serial.println(tempButtonState);
   }
@@ -250,9 +262,14 @@ void SmartLantern::processTouchInputs() {
   // Check for light sensitivity button
   if (sensors.isNewTouch(LIGHT_BUTTON_CHANNEL)) {
     lightButtonState = (lightButtonState + 1) % 4;  // Cycle through states 0-3
+
+    // Save light sensitivity button state
+    preferences.putUChar("lightBtn", lightButtonState);
+
     Serial.print("Light sensitivity state: ");
     Serial.println(lightButtonState);
   }
+
 
   // Check for power button press
   if (sensors.isNewTouch(POWER_BUTTON_CHANNEL)) {

@@ -1,8 +1,11 @@
 #include "SensorController.h"
 
-SensorController::SensorController() : currentTouchState(0),
-                                       previousTouchState(0)
-// Initialize LED handler with the touch sensor's address
+SensorController::SensorController() :
+    currentTouchState(0),
+    previousTouchState(0),
+    lastTempReadTime(0),
+    cachedTemperature(25.0), // Default reasonable values
+    cachedHumidity(50.0)
 {
     // Initialize calibration data to zero
     calibrationData = {0};
@@ -52,10 +55,25 @@ bool SensorController::begin() {
 }
 
 void SensorController::update() {
+    // Always update touch sensor (needed for user input)
     updateTouchSensor();
-    updateTemperatureSensor();
+
+    // Update IMU regularly as it's needed for lantern orientation
     updateIMU();
-    updateTOF();
+
+    // Check if it's time to update temperature
+    unsigned long currentTime = millis();
+    if (currentTime - lastTempReadTime >= tempReadInterval) {
+        updateTemperatureSensor();
+        lastTempReadTime = currentTime;
+    }
+
+    // Update TOF sensor less frequently too, every ~500ms should be plenty
+    static unsigned long lastTofUpdate = 0;
+    if (currentTime - lastTofUpdate >= 500) {
+        updateTOF();
+        lastTofUpdate = currentTime;
+    }
 }
 
 void SensorController::updateTouchSensor() {
@@ -66,7 +84,10 @@ void SensorController::updateTouchSensor() {
 void SensorController::updateTemperatureSensor() {
     sensors_event_t humidity, temp;
     tempSensor.getEvent(&humidity, &temp);
-    // Data is now available in the events
+
+    // Store values in cache
+    cachedTemperature = temp.temperature;
+    cachedHumidity = humidity.relative_humidity;
 }
 
 void SensorController::updateIMU() {
@@ -93,15 +114,13 @@ bool SensorController::isNewRelease(int channel) const {
 }
 
 float SensorController::getTemperature() {
-    sensors_event_t humidity, temp;
-    tempSensor.getEvent(&humidity, &temp);
-    return temp.temperature;
+    // Return cached value instead of reading every time
+    return cachedTemperature;
 }
 
 float SensorController::getHumidity() {
-    sensors_event_t humidity, temp;
-    tempSensor.getEvent(&humidity, &temp);
-    return humidity.relative_humidity;
+    // Return cached value instead of reading every time
+    return cachedHumidity;
 }
 
 bool SensorController::isUpsideDown() const{

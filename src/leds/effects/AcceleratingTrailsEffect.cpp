@@ -95,17 +95,10 @@ void AcceleratingTrailsEffect::update() {
     for (auto& trail : trails) {
         if (!trail.active) continue;
 
-        // Get strip information
-        Adafruit_NeoPixel* strip;
-        int stripLength = 0;
-
-        if (trail.stripId == 1) { // Inner
-            strip = &leds.getInner();
-            stripLength = INNER_LEDS_PER_STRIP;
-        } else { // Outer
-            strip = &leds.getOuter();
-            stripLength = OUTER_LEDS_PER_STRIP;
-        }
+        // Get strip length based on type
+        int stripLength = (trail.stripId == 1) ?
+                          INNER_LEDS_PER_STRIP :
+                          OUTER_LEDS_PER_STRIP;
 
         // Update position with acceleration
         trail.velocity += trail.acceleration;
@@ -140,20 +133,28 @@ void AcceleratingTrailsEffect::update() {
             }
 
             // First LED is colored, rest fade from white to black
-            uint32_t color;
+            CRGB color;
             if (i == 0) {
-                // Lead pixel in full color
-                color = leds.colorHSV(trail.hue, 255, val);
+                // Lead pixel in full color - convert from HSV
+                CHSV hsv(trail.hue >> 8, 255, val); // FastLED uses 0-255 for hue
+                hsv2rgb_rainbow(hsv, color);
             } else {
                 // Rest of trail is white fading to black (reduced saturation)
                 // Gradually change saturation from 0 (white) to very low
                 // as we go from head to tail
                 uint8_t sat = min(255 * i / trail.length, 50); // Max 50 to keep mostly white
-                color = leds.colorHSV(trail.hue, sat, val);
+
+                // Convert from HSV
+                CHSV hsv(trail.hue >> 8, sat, val);
+                hsv2rgb_rainbow(hsv, color);
             }
 
             // Set the pixel
-            strip->setPixelColor(physicalPos, color);
+            if (trail.stripId == 1) { // Inner
+                leds.getInner()[physicalPos] = color;
+            } else { // Outer
+                leds.getOuter()[physicalPos] = color;
+            }
         }
     }
 

@@ -1,14 +1,18 @@
+// src/SmartLantern.h
+
 #ifndef SMART_LANTERN_H
 #define SMART_LANTERN_H
 
 #include <Arduino.h>
+#include <vector>
+#include <Preferences.h>
 #include "leds/LEDController.h"
 #include "sensors/SensorController.h"
 #include "leds/effects/Effect.h"
-#include "leds/effects/StartupEffect.h"
-#include "leds/effects/TrailsEffect.h"
-#include "leds/effects/RainbowEffect.h"
+#include "leds/effects/StartupEffect.h"  // Add this back for the startup animation
 #include "leds/effects/FireEffect.h"
+#include "leds/effects/RainbowEffect.h"
+#include "leds/effects/TrailsEffect.h"
 #include "leds/effects/MatrixEffect.h"
 #include "leds/effects/AcceleratingTrailsEffect.h"
 
@@ -47,15 +51,15 @@ private:
   LEDController leds;
   SensorController sensors;
 
-  // Effects
-  StartupEffect* startupEffect;
-  TrailsEffect* trailsEffect;
-  RainbowEffect* rainbowEffect;
-  FireEffect* fireEffect;
-  MatrixEffect* matrixEffect;
-  AcceleratingTrailsEffect* acceleratingTrailsEffect;
+  Preferences preferences;
 
-  Effect* currentEffectPtr;  // Points to the currently active effect
+  // Vector to store all effects for each mode
+  // effects[mode][effect_index]
+  std::vector<std::vector<Effect*>> effects;
+
+  // Special effects that need direct access
+  StartupEffect* startupEffect;    // Used for initialization
+  FireEffect* fireEffectPtr;       // Used for temperature override
 
   // State variables
   bool isPowerOn;
@@ -74,6 +78,7 @@ private:
   void processTouchInputs();
   void handleAutoLighting();
   void updateEffects();
+  void initializeEffects(); // Helper method to initialize all effects
 };
 
 #endif // SMART_LANTERN_H

@@ -48,6 +48,11 @@ private:
     uint16_t currentTouchState;
     uint16_t previousTouchState;
 
+    unsigned long lastTempReadTime;
+    const unsigned long tempReadInterval = 20000; // 20 seconds between temp reads
+    float cachedTemperature;
+    float cachedHumidity;
+
     // Private helper functions
     void updateTouchSensor();
     void updateTemperatureSensor();

@@ -1,3 +1,5 @@
+// src/leds/effects/MatrixEffect.h
+
 #ifndef MATRIX_EFFECT_H
 #define MATRIX_EFFECT_H
 
@@ -32,16 +34,16 @@ private:
     static const uint8_t WHITE_FLASH_CHANCE = 5;       // Chance of a white flash (out of 100)
     static const uint8_t WHITE_FLASH_MIN = 100;        // Minimum brightness for white flashes
     static const uint8_t HUE_ROTATION_SPEED = 1;       // Speed of hue rotation
-    
+
     // Arrays to hold drops for each strip type
     std::vector<Drop> coreDrops;
     std::vector<Drop> innerDrops[NUM_INNER_STRIPS];
     std::vector<Drop> outerDrops[NUM_OUTER_STRIPS];
     std::vector<Drop> ringDrops;
-    
-    // Color palette
+
+    // Color palette - updated to use CRGB
     static const uint8_t NUM_COLORS = 5;
-    uint32_t colorPalette[NUM_COLORS];
+    CRGB colorPalette[NUM_COLORS];
     
     // State variables
     uint8_t baseHue;
