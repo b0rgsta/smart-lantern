@@ -34,9 +34,6 @@ void StartupEffect::update() {
         return;
     }
 
-    if (position < LED_STRIP_CORE_COUNT) {
-        leds.getCore()[position] = CRGB(0, 255, 0); // Green
-    }
 
     if (position < LED_STRIP_INNER_COUNT) {
         leds.getInner()[position] = CRGB(0, 0, 255); // Blue

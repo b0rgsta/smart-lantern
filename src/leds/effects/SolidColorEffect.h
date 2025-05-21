@@ -36,8 +36,9 @@ public:
     static const uint32_t COLOR_NONE = 0xFF000000;
     // Predefined white color temperatures
     static const uint32_t COLD_WHITE = 0xF0F8FF;     // RGB(240, 248, 255) - Slight blue tint
-    static const uint32_t NATURAL_WHITE = 0xFFFFFF;  // RGB(255, 255, 255) - Pure white
-    static const uint32_t WARM_WHITE = 0xFFE8C0;     // RGB(255, 232, 192) - Slight yellow/orange tint
+    static const uint32_t NATURAL_WHITE = 0xFFDD99;  // RGB(255, 255, 255) - Pure white
+    static const uint32_t WARM_WHITE = 0xFFAA33;     // RGB(255, 232, 192) - Slight yellow/orange tint
+    static const uint32_t Cyan = 0x0FE0D9;     // RGB(255, 232, 192) - Slight yellow/orange tint
 
 private:
 

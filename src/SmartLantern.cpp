@@ -97,7 +97,7 @@ void SmartLantern::initializeEffects() {
     auto reversedRainbowGradient = GradientEffect::reverseGradient(rainbowGradient);
     auto opposingRainbowGradient = new GradientEffect(
         leds,
-        Gradient(), // Core off
+        Gradient(),
         rainbowGradient,
         reversedRainbowGradient,
         Gradient()  // Ring off
@@ -113,11 +113,11 @@ void SmartLantern::initializeEffects() {
     );
 
     // 4. Easter gradient on all strips
-    auto easterGradient = new GradientEffect(
+    auto bavariaGradient = new GradientEffect(
         leds,
         Gradient(),
-        GradientEffect::createEasterGradient(),
-        GradientEffect::reverseGradient(GradientEffect::createEasterGradient()),
+        GradientEffect::createBlueToWhiteGradient(),
+        GradientEffect::reverseGradient(GradientEffect::createBlueToWhiteGradient()),
         Gradient()
 
     );
@@ -125,16 +125,16 @@ void SmartLantern::initializeEffects() {
     // 5. Christmas gradient on all strips
     auto christmasGradient = new GradientEffect(
         leds,
+        GradientEffect::createInnerChristmasGradient(),
         Gradient(),
-        GradientEffect::createChristmasGradient(),
-        GradientEffect::reverseGradient(GradientEffect::createChristmasGradient()),
+        (GradientEffect::createOuterChristmasGradient()),
         Gradient()
     );
 
     effects[MODE_GRADIENT].push_back(purpleBlueOpposingGradient);
     effects[MODE_GRADIENT].push_back(opposingRainbowGradient);
     effects[MODE_GRADIENT].push_back(sunsetGradient);
-    effects[MODE_GRADIENT].push_back(easterGradient);
+    effects[MODE_GRADIENT].push_back(bavariaGradient);
     effects[MODE_GRADIENT].push_back(christmasGradient);
 
     // MODE_ANIMATED

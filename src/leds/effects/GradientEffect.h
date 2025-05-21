@@ -55,8 +55,8 @@ public:
     static Gradient createFireGradient();
     static Gradient createBlueToWhiteGradient();
     static Gradient createSunsetGradient();
-    static Gradient createEasterGradient();
-    static Gradient createChristmasGradient();
+    static Gradient createInnerChristmasGradient();
+    static Gradient createOuterChristmasGradient();
     static Gradient createPurpleToBlueGradient();
     static Gradient createBlueToPurpleGradient();
 
@@ -72,6 +72,7 @@ private:
 
     // Helper methods
     void applyGradient(CRGB* strip, int count, const Gradient& gradient);
+    void applyGradientToPosition(CRGB* strip, int index, float position, const Gradient& gradient);
     CRGB interpolateColors(const CRGB& color1, const CRGB& color2, float ratio);
 };
 

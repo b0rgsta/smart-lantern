@@ -1,16 +1,13 @@
-
 #include "GradientEffect.h"
 
 
 // Constructor with a single gradient for multiple strips
-GradientEffect::GradientEffect(LEDController& ledController,
-                               const Gradient& gradient,
+GradientEffect::GradientEffect(LEDController &ledController,
+                               const Gradient &gradient,
                                bool applyToCore,
                                bool applyToInner,
                                bool applyToOuter,
-                               bool applyToRing) :
-    Effect(ledController)
-{
+                               bool applyToRing) : Effect(ledController) {
     // Apply gradient to selected strips, leave others empty
     if (applyToCore) coreGradient = gradient;
     if (applyToInner) innerGradient = gradient;
@@ -19,17 +16,15 @@ GradientEffect::GradientEffect(LEDController& ledController,
 }
 
 // Constructor with different gradient for each strip
-GradientEffect::GradientEffect(LEDController& ledController,
-                               const Gradient& coreGradient,
-                               const Gradient& innerGradient,
-                               const Gradient& outerGradient,
-                               const Gradient& ringGradient) :
-    Effect(ledController),
-    coreGradient(coreGradient),
-    innerGradient(innerGradient),
-    outerGradient(outerGradient),
-    ringGradient(ringGradient)
-{
+GradientEffect::GradientEffect(LEDController &ledController,
+                               const Gradient &coreGradient,
+                               const Gradient &innerGradient,
+                               const Gradient &outerGradient,
+                               const Gradient &ringGradient) : Effect(ledController),
+                                                               coreGradient(coreGradient),
+                                                               innerGradient(innerGradient),
+                                                               outerGradient(outerGradient),
+                                                               ringGradient(ringGradient) {
     // No additional initialization needed
 }
 
@@ -48,23 +43,23 @@ void GradientEffect::update() {
     leds.showAll();
 }
 
-void GradientEffect::setCoreGradient(const Gradient& gradient) {
+void GradientEffect::setCoreGradient(const Gradient &gradient) {
     coreGradient = gradient;
 }
 
-void GradientEffect::setInnerGradient(const Gradient& gradient) {
+void GradientEffect::setInnerGradient(const Gradient &gradient) {
     innerGradient = gradient;
 }
 
-void GradientEffect::setOuterGradient(const Gradient& gradient) {
+void GradientEffect::setOuterGradient(const Gradient &gradient) {
     outerGradient = gradient;
 }
 
-void GradientEffect::setRingGradient(const Gradient& gradient) {
+void GradientEffect::setRingGradient(const Gradient &gradient) {
     ringGradient = gradient;
 }
 
-void GradientEffect::setAllGradients(const Gradient& gradient) {
+void GradientEffect::setAllGradients(const Gradient &gradient) {
     coreGradient = gradient;
     innerGradient = gradient;
     outerGradient = gradient;
@@ -75,8 +70,7 @@ String GradientEffect::getName() const {
     return "Gradient Effect";
 }
 
-// Helper method to apply a gradient to a strip
-void GradientEffect::applyGradient(CRGB* strip, int count, const Gradient& gradient) {
+void GradientEffect::applyGradient(CRGB *strip, int count, const Gradient &gradient) {
     // If gradient is empty, turn off the strip
     if (gradient.empty()) {
         fill_solid(strip, count, CRGB::Black);
@@ -89,39 +83,102 @@ void GradientEffect::applyGradient(CRGB* strip, int count, const Gradient& gradi
         return;
     }
 
-    // For each LED in the strip
-    for (int i = 0; i < count; i++) {
-        // Calculate position along the strip (0.0 to 1.0)
-        float position = (float)i / (count - 1);
+    // Determine which strip we're dealing with
+    bool isCore = (count == LED_STRIP_CORE_COUNT);
+    bool isInner = (count == LED_STRIP_INNER_COUNT);
+    bool isOuter = (count == LED_STRIP_OUTER_COUNT);
 
-        // Find the gradient points to interpolate between
-        int lowerIndex = 0;
-        int upperIndex = 0;
+    if (isCore) {
+        // For the core strip, we'll divide it into 3 sections
+        int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
 
-        for (int j = 0; j < gradient.size() - 1; j++) {
-            if (position >= gradient[j].position && position <= gradient[j+1].position) {
-                lowerIndex = j;
-                upperIndex = j + 1;
-                break;
-            }
+        // First segment (0 to coreSegmentLength-1)
+        for (int i = 0; i < coreSegmentLength; i++) {
+            // Position within this segment (0.0 to 1.0)
+            float position = (float) i / (coreSegmentLength - 1);
+            applyGradientToPosition(strip, i, position, gradient);
         }
 
-        // Convert colors from uint32_t to CRGB
-        CRGB color1 = leds.neoColorToCRGB(gradient[lowerIndex].color);
-        CRGB color2 = leds.neoColorToCRGB(gradient[upperIndex].color);
+        // Second segment (coreSegmentLength to 2*coreSegmentLength-1)
+        for (int i = 0; i < coreSegmentLength; i++) {
+            int index = coreSegmentLength + i;
+            // Position within this segment (0.0 to 1.0)
+            float position = (float) i / (coreSegmentLength - 1);
+            applyGradientToPosition(strip, index, position, gradient);
+        }
 
-        // Calculate interpolation ratio
-        float lowerPos = gradient[lowerIndex].position;
-        float upperPos = gradient[upperIndex].position;
-        float ratio = (position - lowerPos) / (upperPos - lowerPos);
+        // Third segment (2*coreSegmentLength to end)
+        for (int i = 0; i < (LED_STRIP_CORE_COUNT - 2 * coreSegmentLength); i++) {
+            int index = 2 * coreSegmentLength + i;
+            // Position within this segment (0.0 to 1.0)
+            float position = (float) i / ((LED_STRIP_CORE_COUNT - 2 * coreSegmentLength) - 1);
+            applyGradientToPosition(strip, index, position, gradient);
+        }
+    } else if (isInner) {
+        // Apply gradient to each inner strip segment separately
+        for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
+            int segmentStart = segment * INNER_LEDS_PER_STRIP;
 
-        // Apply the interpolated color
-        strip[i] = interpolateColors(color1, color2, ratio);
+            // Apply gradient to this segment
+            for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
+                int index = segmentStart + i;
+                // Position within this segment (0.0 to 1.0)
+                float position = (float) i / (INNER_LEDS_PER_STRIP - 1);
+                applyGradientToPosition(strip, index, position, gradient);
+            }
+        }
+    } else if (isOuter) {
+        // Apply gradient to each outer strip segment separately
+        for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
+            int segmentStart = segment * OUTER_LEDS_PER_STRIP;
+
+            // Apply gradient to this segment
+            for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+                int index = segmentStart + i;
+                // Position within this segment (0.0 to 1.0)
+                float position = (float) i / (OUTER_LEDS_PER_STRIP - 1);
+                applyGradientToPosition(strip, index, position, gradient);
+            }
+        }
+    } else {
+        // For ring strip (the only remaining option), apply gradient across entire strip
+        for (int i = 0; i < count; i++) {
+            // Calculate position along the strip (0.0 to 1.0)
+            float position = (float) i / (count - 1);
+            applyGradientToPosition(strip, i, position, gradient);
+        }
     }
 }
 
+// Helper method to apply gradient at a specific position
+void GradientEffect::applyGradientToPosition(CRGB *strip, int index, float position, const Gradient &gradient) {
+    // Find the gradient points to interpolate between
+    int lowerIndex = 0;
+    int upperIndex = 0;
+
+    for (int j = 0; j < gradient.size() - 1; j++) {
+        if (position >= gradient[j].position && position <= gradient[j + 1].position) {
+            lowerIndex = j;
+            upperIndex = j + 1;
+            break;
+        }
+    }
+
+    // Convert colors from uint32_t to CRGB
+    CRGB color1 = leds.neoColorToCRGB(gradient[lowerIndex].color);
+    CRGB color2 = leds.neoColorToCRGB(gradient[upperIndex].color);
+
+    // Calculate interpolation ratio
+    float lowerPos = gradient[lowerIndex].position;
+    float upperPos = gradient[upperIndex].position;
+    float ratio = (position - lowerPos) / (upperPos - lowerPos);
+
+    // Apply the interpolated color
+    strip[index] = interpolateColors(color1, color2, ratio);
+}
+
 // Helper for color interpolation
-CRGB GradientEffect::interpolateColors(const CRGB& color1, const CRGB& color2, float ratio) {
+CRGB GradientEffect::interpolateColors(const CRGB &color1, const CRGB &color2, float ratio) {
     // Linear interpolation between two colors
     uint8_t r = color1.r + (color2.r - color1.r) * ratio;
     uint8_t g = color1.g + (color2.g - color1.g) * ratio;
@@ -135,13 +192,13 @@ Gradient GradientEffect::createRainbowGradient(int numPoints) {
     Gradient gradient;
 
     for (int i = 0; i < numPoints; i++) {
-        float position = (float)i / (numPoints - 1);
+        float position = (float) i / (numPoints - 1);
         // Calculate hue (0-255) based on position
         uint8_t hue = 255 * position;
         // Convert HSV to RGB (full saturation and value)
         CRGB rgbColor = CHSV(hue, 255, 255);
         // Convert to uint32_t format
-        uint32_t color = ((uint32_t)rgbColor.r << 16) | ((uint32_t)rgbColor.g << 8) | rgbColor.b;
+        uint32_t color = ((uint32_t) rgbColor.r << 16) | ((uint32_t) rgbColor.g << 8) | rgbColor.b;
 
         gradient.push_back(GradientPoint(color, position));
     }
@@ -199,38 +256,42 @@ Gradient GradientEffect::createSunsetGradient() {
     return gradient;
 }
 
-// Static method to create an Easter gradient (pastels)
-Gradient GradientEffect::createEasterGradient() {
-    Gradient gradient;
-
-    // Pastel pink
-    gradient.push_back(GradientPoint(0xFFB6C1, 0.0f));
-    // Pastel blue
-    gradient.push_back(GradientPoint(0xADD8E6, 0.25f));
-    // Pastel green
-    gradient.push_back(GradientPoint(0x98FB98, 0.5f));
-    // Pastel yellow
-    gradient.push_back(GradientPoint(0xFFFFE0, 0.75f));
-    // Pastel purple
-    gradient.push_back(GradientPoint(0xE6E6FA, 1.0f));
-
-    return gradient;
-}
 
 // Static method to create a Christmas gradient (red & green)
-Gradient GradientEffect::createChristmasGradient() {
+Gradient GradientEffect::createOuterChristmasGradient() {
     Gradient gradient;
 
     // Deep red
     gradient.push_back(GradientPoint(0xAA0000, 0.0f));
     // Bright red
     gradient.push_back(GradientPoint(0xFF0000, 0.25f));
-    // White (for transition)
-    gradient.push_back(GradientPoint(0xFFFFFF, 0.5f));
+    // Black (for transition)
+    gradient.push_back(GradientPoint(0x000000, 0.5f));
     // Bright green
     gradient.push_back(GradientPoint(0x00FF00, 0.75f));
     // Deep green
     gradient.push_back(GradientPoint(0x006600, 1.0f));
+
+    return gradient;
+}
+
+// Static method to create a Christmas gradient (red & green)
+Gradient GradientEffect::createInnerChristmasGradient() {
+    Gradient gradient;
+
+    // Add red at position 0.0
+    gradient.emplace_back(0xFF0000, 0.0f);
+
+    // Alternate white and red, properly spaced
+    for (unsigned int i = 0; i < 9; i++) {
+        // White at positions 0.2, 0.6, 1.0, etc.
+        gradient.emplace_back(0xFFFFFF, 0.1f + (i * 0.2f));
+
+        // Red at positions 0.4, 0.8, etc.
+        if (i < 8) {
+            gradient.emplace_back(0xFF0000, 0.3f + (i * 0.2f));
+        }
+    }
 
     return gradient;
 }
@@ -260,17 +321,17 @@ Gradient GradientEffect::createBlueToPurpleGradient() {
 }
 
 // Helper for reversing a gradient
-Gradient GradientEffect::reverseGradient(const Gradient& gradient) {
+Gradient GradientEffect::reverseGradient(const Gradient &gradient) {
     Gradient reversed;
 
-    for (const auto& point : gradient) {
+    for (const auto &point: gradient) {
         // Add each point with inverted position (1.0 - original position)
         reversed.push_back(GradientPoint(point.color, 1.0f - point.position));
     }
 
     // Sort by position to ensure proper interpolation
     std::sort(reversed.begin(), reversed.end(),
-              [](const GradientPoint& a, const GradientPoint& b) {
+              [](const GradientPoint &a, const GradientPoint &b) {
                   return a.position < b.position;
               });
 
