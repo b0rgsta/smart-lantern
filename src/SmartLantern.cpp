@@ -9,6 +9,7 @@
 #include "leds/effects/MatrixEffect.h"
 #include "leds/effects/AcceleratingTrailsEffect.h"
 #include "leds/effects/SolidColorEffect.h"
+#include "leds/effects/GradientEffect.h"
 
 SmartLantern::SmartLantern() : isPowerOn(false),
                                isAutoOn(false),
@@ -52,6 +53,7 @@ void SmartLantern::initializeEffects() {
     // Store a reference to the fire effect for temperature override
     fireEffectPtr = fireEffect;
 
+    // Solid color effects for ambient mode
     auto coolWhiteEffect = new SolidColorEffect(
         leds,
         SolidColorEffect::COLOR_NONE, // Core
@@ -74,17 +76,66 @@ void SmartLantern::initializeEffects() {
         SolidColorEffect::WARM_WHITE, // Inner (off)
         SolidColorEffect::WARM_WHITE, // Outer (off)
         SolidColorEffect::COLOR_NONE // Ring
-    );
+        );
 
-    // MODE_OFF - empty
-
-    // MODE_AMBIENT
     effects[MODE_AMBIENT].push_back(coolWhiteEffect); // Cool white
     effects[MODE_AMBIENT].push_back(whiteEffect); // Pure white
     effects[MODE_AMBIENT].push_back(warmWhiteEffect); // Warm white
 
-    // MODE_GRADIENT
-    effects[MODE_GRADIENT].push_back(rainbowEffect); // Rainbow cycle
+    // Gradient effects for gradient mode
+    // 1. Purple-Blue opposing gradients (inner purple→blue, outer blue→purple, others off)
+    auto purpleBlueOpposingGradient = new GradientEffect(
+        leds,
+        Gradient(), // Core off
+        GradientEffect::createPurpleToBlueGradient(),
+        GradientEffect::createBlueToPurpleGradient(),
+        Gradient()  // Ring off
+    );
+
+    // 2. Rainbow but flipped directions for inner and outer
+    auto rainbowGradient = GradientEffect::createRainbowGradient();
+    auto reversedRainbowGradient = GradientEffect::reverseGradient(rainbowGradient);
+    auto opposingRainbowGradient = new GradientEffect(
+        leds,
+        Gradient(), // Core off
+        rainbowGradient,
+        reversedRainbowGradient,
+        Gradient()  // Ring off
+    );
+
+    // 3. Sunset gradient on all strips
+    auto sunsetGradient = new GradientEffect(
+        leds,
+        Gradient(),
+        GradientEffect::createSunsetGradient(),
+        GradientEffect::reverseGradient(GradientEffect::createSunsetGradient()),
+        Gradient()
+    );
+
+    // 4. Easter gradient on all strips
+    auto easterGradient = new GradientEffect(
+        leds,
+        Gradient(),
+        GradientEffect::createEasterGradient(),
+        GradientEffect::reverseGradient(GradientEffect::createEasterGradient()),
+        Gradient()
+
+    );
+
+    // 5. Christmas gradient on all strips
+    auto christmasGradient = new GradientEffect(
+        leds,
+        Gradient(),
+        GradientEffect::createChristmasGradient(),
+        GradientEffect::reverseGradient(GradientEffect::createChristmasGradient()),
+        Gradient()
+    );
+
+    effects[MODE_GRADIENT].push_back(purpleBlueOpposingGradient);
+    effects[MODE_GRADIENT].push_back(opposingRainbowGradient);
+    effects[MODE_GRADIENT].push_back(sunsetGradient);
+    effects[MODE_GRADIENT].push_back(easterGradient);
+    effects[MODE_GRADIENT].push_back(christmasGradient);
 
     // MODE_ANIMATED
     effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
