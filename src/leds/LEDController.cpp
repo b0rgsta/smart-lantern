@@ -55,21 +55,21 @@ int LEDController::mapPositionToPhysical(int stripId, int logicalPos, int subStr
   
   switch (stripId) {
     case 0: // Core strip
-      // No additional mapping needed
+      // For core, we need to flip the B-C sections
+      if (logicalPos > LED_STRIP_CORE_COUNT / 3) {  // If in sections B or C
+        // Flip the position for B-C sections
+        physicalPos = LED_STRIP_CORE_COUNT - 1 - logicalPos;
+      }
       break;
-      
+
     case 1: // Inner strips
+      // No flipping for inner strips - they're in-line
       physicalPos = logicalPos % INNER_LEDS_PER_STRIP;
-      if (subStrip % 2 == 1) {
-        physicalPos = INNER_LEDS_PER_STRIP - 1 - physicalPos;
-      }
       break;
-      
+
     case 2: // Outer strips
+      // No flipping for outer strips - they're in-line
       physicalPos = logicalPos % OUTER_LEDS_PER_STRIP;
-      if (subStrip % 2 == 1) {
-        physicalPos = OUTER_LEDS_PER_STRIP - 1 - physicalPos;
-      }
       break;
       
     case 3: // Ring strip

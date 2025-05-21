@@ -106,7 +106,7 @@ void SmartLantern::setPower(bool on) {
     
     if (isPowerOn) {
       // Turn on - set to default mode
-      currentMode = MODE_AMBIENT;
+      currentMode = MODE_ANIMATED;
       leds.setBrightness(77);  // 30% brightness
     } else {
       // Turn off
