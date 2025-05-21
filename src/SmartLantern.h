@@ -9,6 +9,8 @@
 #include "leds/effects/TrailsEffect.h"
 #include "leds/effects/RainbowEffect.h"
 #include "leds/effects/FireEffect.h"
+#include "leds/effects/MatrixEffect.h"
+#include "leds/effects/AcceleratingTrailsEffect.h"
 
 // Define modes
 enum LanternMode {
@@ -50,6 +52,8 @@ private:
   TrailsEffect* trailsEffect;
   RainbowEffect* rainbowEffect;
   FireEffect* fireEffect;
+  MatrixEffect* matrixEffect;
+  AcceleratingTrailsEffect* acceleratingTrailsEffect;
 
   Effect* currentEffectPtr;  // Points to the currently active effect
 

@@ -21,7 +21,9 @@ SmartLantern::SmartLantern() :
   trailsEffect = new TrailsEffect(leds);
   rainbowEffect = new RainbowEffect(leds);
   fireEffect = new FireEffect(leds);
-  
+  matrixEffect = new MatrixEffect(leds);  // Initialize the new effect
+  acceleratingTrailsEffect = new AcceleratingTrailsEffect(leds);
+
   // Set default effect
   currentEffectPtr = trailsEffect;
 }
@@ -32,6 +34,8 @@ SmartLantern::~SmartLantern() {
   delete trailsEffect;
   delete rainbowEffect;
   delete fireEffect;
+  delete matrixEffect;  // Clean up the new effect
+  delete acceleratingTrailsEffect;
 }
 
 void SmartLantern::begin() {
@@ -94,7 +98,7 @@ void SmartLantern::nextMode() {
 void SmartLantern::nextEffect() {
   // Effects are mode-dependent, so number will vary
   // For simplicity, we'll cycle through 0-3 for all modes
-  currentEffect = (currentEffect + 1) % 4;
+  currentEffect = (currentEffect + 1) % 5;
   
   Serial.print("Effect changed to: ");
   Serial.println(currentEffect);
@@ -175,28 +179,59 @@ void SmartLantern::updateEffects() {
           leds.getRing().setPixelColor(i, warmColor);
         }
         leds.showAll();
-      } else {
-        // Other ambient effects...
+      } else if (currentEffect == 2) {
+        // Rainbow effect
         rainbowEffect->update();
+      } else {
+        // Matrix effect (new)
+        matrixEffect->update();
       }
       break;
-      
+
     case MODE_GRADIENT:
       // Rainbow cycle effect
       rainbowEffect->update();
       break;
-      
+
     case MODE_ANIMATED:
-      // Trails effect
-      fireEffect->update();
-      break;
-      
-    case MODE_PARTY:
-      // Party effects - could be a more rapidly changing rainbow
-      if (currentEffect % 2 == 0) {
-        rainbowEffect->update();
-      } else {
+      // Various animated effects
+      if (currentEffect == 0) {
+        fireEffect->update();
+      } else if (currentEffect == 1) {
         trailsEffect->update();
+      } else if (currentEffect == 2) {
+        matrixEffect->update();
+      } else if (currentEffect == 3) {
+        acceleratingTrailsEffect->update();
+      } else {
+        rainbowEffect->update();
+      }
+      break;
+
+    case MODE_PARTY:
+      // Party effects
+      if (currentEffect == 0) {
+        rainbowEffect->update();
+      } else if (currentEffect == 1) {
+        trailsEffect->update();
+      } else if (currentEffect == 2) {
+        matrixEffect->update();  // Use the matrix effect
+      } else {
+        // Alternating effects for party mode
+        static unsigned long lastSwitch = 0;
+        if (millis() - lastSwitch > 5000) {  // Switch every 5 seconds
+          lastSwitch = millis();
+          static int partyEffect = 0;
+          partyEffect = (partyEffect + 1) % 3;
+
+          if (partyEffect == 0) {
+            rainbowEffect->update();
+          } else if (partyEffect == 1) {
+            trailsEffect->update();
+          } else {
+            matrixEffect->update();
+          }
+        }
       }
       break;
   }
