@@ -40,7 +40,7 @@ public:
 
   // Effect control
   void nextEffect();
-  int getCurrentEffect() const { return currentEffect; }
+  unsigned int getCurrentEffect() const { return currentEffect; }
 
   // Power control
   void setPower(bool on);
@@ -65,7 +65,7 @@ private:
   bool isPowerOn;
   bool isAutoOn;
   LanternMode currentMode;
-  int currentEffect;
+  unsigned int currentEffect;
   int tempButtonState;
   int lightButtonState;
 

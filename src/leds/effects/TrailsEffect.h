@@ -22,6 +22,7 @@ public:
     void update() override;
     void reset() override;
 
+    String getName() const override { return "Trails Effect"; }
 private:
     void createNewTrail();
 

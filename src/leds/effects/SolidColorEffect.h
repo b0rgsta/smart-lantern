@@ -13,6 +13,7 @@ public:
     void reset() override;
     void setColor(uint32_t color);
 
+    String getName() const override { return "Solid Color Effect: " + String(color); }
 private:
     uint32_t color;
 };

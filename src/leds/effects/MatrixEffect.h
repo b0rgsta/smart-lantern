@@ -24,6 +24,7 @@ public:
     void update() override;
     void reset() override;
 
+    String getName() const override { return "Matrix Effect"; }
 private:
     // Constants for the effect
     static const uint8_t TRAIL_LENGTH = 15;            // Length of each drop's trail

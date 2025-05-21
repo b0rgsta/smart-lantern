@@ -9,6 +9,7 @@ public:
 
     void update() override;
     void reset() override;
+    String getName() const override { return "Rainbow Effect"; }
 
 private:
     uint16_t cycle;

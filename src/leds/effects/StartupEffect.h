@@ -12,6 +12,7 @@ public:
 
     bool isComplete() { return complete; }
 
+    String getName() const override { return "Startup Effect"; }
 private:
     int position;
     unsigned long lastUpdate;

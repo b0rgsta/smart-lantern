@@ -56,9 +56,13 @@ void FireEffect::reset() {
             float percentHeight = (float)i / INNER_LEDS_PER_STRIP;
 
             // Heat decreases as we go up
-            if (percentHeight < 0.3) {
+            if (percentHeight < 0.2) {
+                // Very hot base with white-hot elements
+                heatInner[index] = random(230, 255);  // Higher heat for white-hot appearance
+            }
+            else if (percentHeight < 0.4) {
                 // Hot base
-                heatInner[index] = 220;
+                heatInner[index] = random(200, 230);
             }
             else if (percentHeight < 0.7) {
                 // Medium middle
@@ -81,9 +85,13 @@ void FireEffect::reset() {
             float percentHeight = (float)i / OUTER_LEDS_PER_STRIP;
 
             // Heat decreases as we go up - use slightly higher values than inner
-            if (percentHeight < 0.3) {
+            if (percentHeight < 0.2) {
+                // Very hot base with white-hot elements
+                heatOuter[index] = random(240, 255);  // Higher heat for white-hot appearance
+            }
+            else if (percentHeight < 0.4) {
                 // Hot base
-                heatOuter[index] = 230;
+                heatOuter[index] = random(210, 240);
             }
             else if (percentHeight < 0.7) {
                 // Medium middle
@@ -100,10 +108,10 @@ void FireEffect::reset() {
 }
 
 void FireEffect::update() {
-    // Control animation speed - only update every 60ms for slower movement
+    // Control animation speed - reduce from 60ms to 40ms for faster movement
     unsigned long currentTime = millis();
-    if (currentTime - lastUpdateTime < 60) {
-        return; // Skip this frame to slow down the animation
+    if (currentTime - lastUpdateTime < 40) {  // Changed from 60ms to 40ms
+        return; // Skip this frame to control the animation speed
     }
 
     // Update the fire simulation
@@ -120,9 +128,9 @@ void FireEffect::update() {
 }
 
 void FireEffect::updateFireBase() {
-    // Simplified fire parameters
-    int cooling = 20;  // Lower cooling value for less rapid changes
-    int sparking = 80; // Lower spark chance for less activity
+    // Adjusted fire parameters for faster movement
+    int cooling = 15;  // Reduced cooling for less rapid changes but more intense fire
+    int sparking = 90; // Higher spark chance for more activity
 
     // ====== INNER STRIPS ======
     // Process each inner strip segment separately
@@ -143,7 +151,7 @@ void FireEffect::updateFireBase() {
             // More cooling at top, less at bottom
             int coolAmount;
             if (i < INNER_LEDS_PER_STRIP * 0.3) {
-                coolAmount = random(0, cooling / 4); // Reduced cooling for slower changes
+                coolAmount = random(0, cooling / 5); // Reduced cooling for hotter base
             } else if (i < INNER_LEDS_PER_STRIP * 0.7) {
                 coolAmount = random(0, cooling / 3);
             } else {
@@ -157,15 +165,20 @@ void FireEffect::updateFireBase() {
             }
         }
 
-        // Heat rises upward - slower mixing for smoother flames
+        // Heat rises upward - faster mixing for more active flames
         for (int i = INNER_LEDS_PER_STRIP - 1; i >= 2; i--) {
-            tempHeat[i] = (tempHeat[i] * 2 + tempHeat[i-1] * 3 + tempHeat[i-2]) / 6;
+            tempHeat[i] = (tempHeat[i] * 1 + tempHeat[i-1] * 3 + tempHeat[i-2] * 2) / 6; // Adjusted weights for faster rising
         }
 
         // Randomly ignite new sparks at the bottom
         if (random8() < sparking) {
             int y = random8(5); // Just the bottom few LEDs
-            tempHeat[y] = tempHeat[y] + random8(40, 100); // Smaller sparks for less activity
+            tempHeat[y] = tempHeat[y] + random8(60, 140); // Larger sparks for more activity
+
+            // Occasionally add a white-hot spark (250+ is white in our color mapping)
+            if (random8() < 30) {  // 30% chance for an extra hot spark
+                tempHeat[y] = min(255, tempHeat[y] + random8(30, 60));
+            }
         }
 
         // Copy back to main array
@@ -175,17 +188,9 @@ void FireEffect::updateFireBase() {
     }
 
     // ====== OUTER STRIPS ======
-    // Process each outer strip segment separately
+    // Process each outer strip segment separately (similar changes as inner strips)
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
         int segmentStart = segment * OUTER_LEDS_PER_STRIP;
-
-        // Debug outer segment info
-        Serial.print("Processing outer segment ");
-        Serial.print(segment);
-        Serial.print(": Start idx=");
-        Serial.print(segmentStart);
-        Serial.print(", End idx=");
-        Serial.println(segmentStart + OUTER_LEDS_PER_STRIP - 1);
 
         // Create temporary array for this segment
         byte tempHeat[OUTER_LEDS_PER_STRIP];
@@ -201,7 +206,7 @@ void FireEffect::updateFireBase() {
             // More cooling at top, less at bottom
             int coolAmount;
             if (i < OUTER_LEDS_PER_STRIP * 0.3) {
-                coolAmount = random(0, cooling / 4); // Reduced cooling for slower changes
+                coolAmount = random(0, cooling / 5); // Reduced cooling for hotter base
             } else if (i < OUTER_LEDS_PER_STRIP * 0.7) {
                 coolAmount = random(0, cooling / 3);
             } else {
@@ -215,15 +220,20 @@ void FireEffect::updateFireBase() {
             }
         }
 
-        // Heat rises upward - slower mixing for smoother flames
+        // Heat rises upward - faster mixing for more active flames
         for (int i = OUTER_LEDS_PER_STRIP - 1; i >= 2; i--) {
-            tempHeat[i] = (tempHeat[i] * 2 + tempHeat[i-1] * 3 + tempHeat[i-2]) / 6;
+            tempHeat[i] = (tempHeat[i] * 1 + tempHeat[i-1] * 3 + tempHeat[i-2] * 2) / 6; // Adjusted weights for faster rising
         }
 
         // Randomly ignite new sparks at the bottom
         if (random8() < sparking) {
             int y = random8(5); // Just the bottom few LEDs
-            tempHeat[y] = tempHeat[y] + random8(40, 100); // Smaller sparks for less activity
+            tempHeat[y] = tempHeat[y] + random8(60, 140); // Larger sparks for more activity
+
+            // Occasionally add a white-hot spark (250+ is white in our color mapping)
+            if (random8() < 30) {  // 30% chance for an extra hot spark
+                tempHeat[y] = min(255, tempHeat[y] + random8(30, 60));
+            }
         }
 
         // Copy back to main array
@@ -268,29 +278,36 @@ void FireEffect::updateFireBase() {
 }
 
 uint32_t FireEffect::heatToColor(unsigned char heat) {
-    // Convert heat value to fire colors (red to orange)
-
+    // Convert heat value to fire colors (white-yellow-orange-red)
     CRGB color;
 
     if (heat <= 0) {
         // No heat = black
         color = CRGB(0, 0, 0);
     }
-    else if (heat < 85) {
+    else if (heat < 70) {
         // Low heat = dark red
-        uint8_t red = map(heat, 0, 85, 0, 160);
+        uint8_t red = map(heat, 0, 70, 0, 160);
         color = CRGB(red, 0, 0);
     }
-    else if (heat < 170) {
+    else if (heat < 140) {
         // Medium heat = red
-        uint8_t red = map(heat, 85, 170, 160, 255);
-        uint8_t green = map(heat, 85, 170, 0, 40);
+        uint8_t red = map(heat, 70, 140, 160, 255);
+        uint8_t green = map(heat, 70, 140, 0, 40);
+        color = CRGB(red, green, 0);
+    }
+    else if (heat < 210) {
+        // High heat = orange-yellow
+        uint8_t red = 255;
+        uint8_t green = map(heat, 140, 210, 40, 120);
         color = CRGB(red, green, 0);
     }
     else {
-        // High heat = orange-red
-        uint8_t green = map(heat, 170, 255, 40, 80);
-        color = CRGB(255, green, 0);
+        // Very high heat = white-hot core
+        uint8_t red = 255;
+        uint8_t green = map(heat, 210, 255, 120, 255);
+        uint8_t blue = map(heat, 210, 255, 0, 220);  // Add blue to make it whiter
+        color = CRGB(red, green, blue);
     }
 
     return (uint32_t)color.r << 16 | (uint32_t)color.g << 8 | color.b;
@@ -325,29 +342,11 @@ void FireEffect::renderFire() {
                 }
             }
         }
-
-        Serial.print("Inner segment ");
-        Serial.print(segment);
-        Serial.print(": ");
-        Serial.print(activePixels);
-        Serial.println(" active pixels");
     }
 
     // Render outer strips
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
         int activePixels = 0;
-
-        // CRITICAL FIX: Explicitly check and print the active heat values for third segment
-        if (segment == 2) {
-            Serial.println("Checking heat values in third outer segment:");
-            for (int i = 0; i < 10; i++) { // Just check first 10 LEDs
-                int idx = segment * OUTER_LEDS_PER_STRIP + i;
-                Serial.print("Pixel ");
-                Serial.print(i);
-                Serial.print(": Heat = ");
-                Serial.println(heatOuter[idx]);
-            }
-        }
 
         for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
             int idx = segment * OUTER_LEDS_PER_STRIP + i;
@@ -365,30 +364,13 @@ void FireEffect::renderFire() {
                     uint32_t colorVal = heatToColor(heatOuter[idx]);
                     CRGB color = leds.neoColorToCRGB(colorVal);
                     leds.getOuter()[physicalPos] = color;
-
-                    // Debug output for third segment
-                    if (segment == 2 && i < 5) {
-                        Serial.print("Setting third segment LED ");
-                        Serial.print(i);
-                        Serial.print(" (physical: ");
-                        Serial.print(physicalPos);
-                        Serial.print(") to color: ");
-                        Serial.println(colorVal, HEX);
-                    }
                 }
             }
         }
-
-        Serial.print("Outer segment ");
-        Serial.print(segment);
-        Serial.print(": ");
-        Serial.print(activePixels);
-        Serial.println(" active pixels");
     }
 
     // FORCE-ON TEST for third outer strip
     if (true) {
-        Serial.println("FORCE-ON TEST: Setting first few LEDs in third outer strip");
         for (int i = 0; i < 10; i++) {
             int segment = 2; // Third segment
             int physicalPos = i + segment * OUTER_LEDS_PER_STRIP;
@@ -403,16 +385,6 @@ void FireEffect::renderFire() {
 int FireEffect::mapLEDPosition(int stripType, int position, int subStrip) {
     // Use the LED controller's mapping function with debug output
     int result = leds.mapPositionToPhysical(stripType, position, subStrip);
-
-    // Debug output for unusual mappings
-    if (stripType == 2 && subStrip == 2 && position < 5) {
-        Serial.print("Mapping outer strip ");
-        Serial.print(subStrip);
-        Serial.print(", position ");
-        Serial.print(position);
-        Serial.print(" to physical position: ");
-        Serial.println(result);
-    }
 
     return result;
 }

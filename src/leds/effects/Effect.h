@@ -3,13 +3,15 @@
 
 #include "../LEDController.h"
 
-class Effect {
+ class Effect {
 public:
     Effect(LEDController& ledController) : leds(ledController) {}
     virtual ~Effect() {}
 
     virtual void update() = 0;  // Must be implemented by derived classes
     virtual void reset() {}     // Optional to implement
+
+    virtual String getName() const = 0; // Must be implemented by derived classes
 
 protected:
     LEDController& leds;

@@ -45,6 +45,8 @@ public:
      */
     void setIntensity(unsigned char intensity);
 
+    String getName() const override { return "Fire Effect"; }
+
 private:
     // Heat simulation arrays for each strip
     unsigned char* heatCore;

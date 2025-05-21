@@ -29,6 +29,8 @@ public:
     void update() override;
     void reset() override;
 
+    String getName() const override { return "Accelerating Trails"; }
+
 private:
     void createNewTrail();
     void ensureMinimumTrails();
