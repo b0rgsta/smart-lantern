@@ -85,9 +85,10 @@ void SmartLantern::nextMode() {
   // Cycle through modes 1-4 (skipping MODE_OFF)
   currentMode = static_cast<LanternMode>((currentMode % 4) + 1);
   currentEffect = 0;  // Reset effect when mode changes
-  
-  Serial.print("Mode changed to: ");
-  Serial.println(currentMode);
+
+  String modeNames[] = {"OFF", "AMBIENT", "GRADIENT", "ANIMATED", "PARTY"};
+
+  Serial.print("Mode changed to: " + modeNames[currentMode]);
 }
 
 void SmartLantern::nextEffect() {
@@ -129,8 +130,6 @@ void SmartLantern::updateEffects() {
   // Check for temperature override
   float currentTemp = sensors.getTemperature();
   if (tempButtonState > 0 && currentTemp <= TEMP_THRESHOLD_RED) {
-    // Temperature mode is active and it's cold enough
-    fireEffect->setTemperature(currentTemp);
     fireEffect->update();
     return;
   }
@@ -189,7 +188,7 @@ void SmartLantern::updateEffects() {
       
     case MODE_ANIMATED:
       // Trails effect
-      trailsEffect->update();
+      fireEffect->update();
       break;
       
     case MODE_PARTY:

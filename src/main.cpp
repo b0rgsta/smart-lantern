@@ -15,7 +15,9 @@ void setup() {
     Serial.println("Smart Lantern Starting...");
 
     // Initialize random seed
-    randomSeed(analogRead(0));
+    // set pin 13 as input to read noise
+    pinMode(13, INPUT);
+    randomSeed(analogRead(13));
 
     // Initialize the lantern
     lantern.begin();
@@ -26,5 +28,5 @@ void loop() {
     lantern.update();
 
     // Small delay for animation speed
-    delay(50);
+    delay(20);
 }

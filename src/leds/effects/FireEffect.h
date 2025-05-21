@@ -8,10 +8,6 @@ public:
     FireEffect(LEDController& ledController);
 
     void update() override;
-    void setTemperature(float temperature);
-
-private:
-    float temperature;
 };
 
 #endif // FIRE_EFFECT_H
