@@ -7,21 +7,16 @@ FireEffect::FireEffect(LEDController& ledController) :
     heatCore(nullptr),
     heatInner(nullptr),
     heatOuter(nullptr),
-    lastEmberTime(0),
-    intensity(70),             // Default fire intensity (0-100)
-    windDirection(128),        // Default wind direction (128 = straight up)
-    windStrength(10),          // Default wind strength (0-100)
-    baseFlickerRate(30),       // Default flicker rate (0-100)
     lastUpdateTime(0),
-    animationSpeed(1.0)        // Default animation speed multiplier
+    intensity(70)
 {
-    // Initialize heat arrays and particles
-    initHeatArrays();
+    // Allocate memory for heat arrays
+    heatCore = new byte[LED_STRIP_CORE_COUNT];
+    heatInner = new byte[LED_STRIP_INNER_COUNT];
+    heatOuter = new byte[LED_STRIP_OUTER_COUNT];
 
-    // Pre-create some embers
-    for (int i = 0; i < 5; i++) {
-        createEmber();
-    }
+    // Initialize with default values
+    reset();
 }
 
 FireEffect::~FireEffect() {
@@ -31,73 +26,93 @@ FireEffect::~FireEffect() {
     if (heatOuter) delete[] heatOuter;
 }
 
-void FireEffect::initHeatArrays() {
-    // Allocate memory for heat arrays
-    heatCore = new byte[LED_STRIP_CORE_COUNT];
-    heatInner = new byte[LED_STRIP_INNER_COUNT];
-    heatOuter = new byte[LED_STRIP_OUTER_COUNT];
-
-    // Initialize heat values with gradient (hotter at bottom)
-    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
-        // Hotter at bottom (closer to 0 index)
-        int height = LED_STRIP_CORE_COUNT - i - 1;
-        heatCore[i] = constrain(255 - (height * 255 / LED_STRIP_CORE_COUNT) * 1.2, 0, 255);
-    }
-
-    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
-        // Calculate which segment this pixel belongs to
-        int segment = i / INNER_LEDS_PER_STRIP;
-        int localPos = i % INNER_LEDS_PER_STRIP;
-
-        // Hotter at bottom of each segment
-        int height = INNER_LEDS_PER_STRIP - localPos - 1;
-        heatInner[i] = constrain(255 - (height * 255 / INNER_LEDS_PER_STRIP) * 1.2, 0, 255);
-    }
-
-    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
-        // Calculate which segment this pixel belongs to
-        int segment = i / OUTER_LEDS_PER_STRIP;
-        int localPos = i % OUTER_LEDS_PER_STRIP;
-
-        // Hotter at bottom of each segment
-        int height = OUTER_LEDS_PER_STRIP - localPos - 1;
-        heatOuter[i] = constrain(255 - (height * 255 / OUTER_LEDS_PER_STRIP) * 1.2, 0, 255);
-    }
-}
-
 void FireEffect::reset() {
-    // Reset all heat values
-    initHeatArrays();
+    // Initialize all arrays to zero
+    memset(heatCore, 0, LED_STRIP_CORE_COUNT);
+    memset(heatInner, 0, LED_STRIP_INNER_COUNT);
+    memset(heatOuter, 0, LED_STRIP_OUTER_COUNT);
 
-    // Clear all particles
-    embers.clear();
-    smoke.clear();
+    // Debug print
+    Serial.println("FireEffect reset - initializing all strips");
+    Serial.print("NUM_INNER_STRIPS: ");
+    Serial.println(NUM_INNER_STRIPS);
+    Serial.print("NUM_OUTER_STRIPS: ");
+    Serial.println(NUM_OUTER_STRIPS);
+    Serial.print("INNER_LEDS_PER_STRIP: ");
+    Serial.println(INNER_LEDS_PER_STRIP);
+    Serial.print("OUTER_LEDS_PER_STRIP: ");
+    Serial.println(OUTER_LEDS_PER_STRIP);
 
-    // Reset timing variables
+    // Set initial heat values for all strips
+    // Start with hot base that fades to cool top
+
+    // Inner strips - consistent pattern for ALL 3 segments
+    for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
+        Serial.print("Initializing inner segment: ");
+        Serial.println(segment);
+
+        for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
+            int index = segment * INNER_LEDS_PER_STRIP + i;
+            float percentHeight = (float)i / INNER_LEDS_PER_STRIP;
+
+            // Heat decreases as we go up
+            if (percentHeight < 0.3) {
+                // Hot base
+                heatInner[index] = 220;
+            }
+            else if (percentHeight < 0.7) {
+                // Medium middle
+                heatInner[index] = 160;
+            }
+            else {
+                // Cool top
+                heatInner[index] = 100;
+            }
+        }
+    }
+
+    // Outer strips - consistent pattern for ALL 3 segments
+    for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
+        Serial.print("Initializing outer segment: ");
+        Serial.println(segment);
+
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            int index = segment * OUTER_LEDS_PER_STRIP + i;
+            float percentHeight = (float)i / OUTER_LEDS_PER_STRIP;
+
+            // Heat decreases as we go up - use slightly higher values than inner
+            if (percentHeight < 0.3) {
+                // Hot base
+                heatOuter[index] = 230;
+            }
+            else if (percentHeight < 0.7) {
+                // Medium middle
+                heatOuter[index] = 170;
+            }
+            else {
+                // Cool top
+                heatOuter[index] = 110;
+            }
+        }
+    }
+
     lastUpdateTime = millis();
-    lastEmberTime = millis();
 }
 
 void FireEffect::update() {
-    // Get current time
+    // Control animation speed - only update every 60ms for slower movement
     unsigned long currentTime = millis();
-    unsigned long elapsed = currentTime - lastUpdateTime;
+    if (currentTime - lastUpdateTime < 60) {
+        return; // Skip this frame to slow down the animation
+    }
 
-    // Calculate dynamic "frame delta" for smoother animation
-    // regardless of actual update frequency
-    float deltaTime = elapsed / 33.0f; // Normalize to ~30fps
-
-    // Update core fire simulation
+    // Update the fire simulation
     updateFireBase();
-
-    // Update particle effects
-    updateEmbers();
-    updateSmoke();
 
     // Render the fire
     renderFire();
 
-    // Show all strips
+    // Show the changes
     leds.showAll();
 
     // Update timing
@@ -105,239 +120,304 @@ void FireEffect::update() {
 }
 
 void FireEffect::updateFireBase() {
-    // 1. COOLING: How much does the air cool as it rises?
-    // Less cooling = taller flames, more cooling = shorter flames
-    // Cooler flames are less intense and redder, hotter flames are more energetic and yellow
-    int cooling = map(100 - intensity, 0, 100, 20, 80);
+    // Simplified fire parameters
+    int cooling = 20;  // Lower cooling value for less rapid changes
+    int sparking = 80; // Lower spark chance for less activity
 
-    // 2. SPARKING: How many sparks will be added to the fire base this cycle?
-    // More sparks = more active and taller fire
-    int sparking = map(intensity, 0, 100, 50, 200);
-
-    // 3. CORE STRIP (CENTER OF FIRE)
-    // Core strip should have minimal cooling as it's the center of the fire
-    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
-        // Apply cooling based on height
-        int heightCooling = cooling * (i * 1.0 / LED_STRIP_CORE_COUNT); // More cooling at top
-        int cooldown = random8(0, heightCooling);
-
-        // Apply the cooling - use FastLED's qadd8/qsub8 for better performance
-        heatCore[i] = qsub8(heatCore[i], cooldown);
-    }
-
-    // Sparking: add new energy at the base
-    if (random8() < sparking) {
-        int y = random8(min(7, LED_STRIP_CORE_COUNT / 5)); // Limited to bottom section
-        int sparkHeat = random8(160, 255); // Create new spark at the base
-        heatCore[y] = qadd8(heatCore[y], sparkHeat); // Add the spark (with saturation)
-    }
-
-    // Heat rises: blend each cell with cells above it
-    for (int i = LED_STRIP_CORE_COUNT - 1; i >= 2; i--) {
-        // Get a blend of the cells around this one, with bias upward
-        heatCore[i] = (heatCore[i - 1] + heatCore[i - 2] + heatCore[i - 2]) / 3;
-    }
-
-    // 4. INNER STRIPS (MAIN FLAME BODY)
-    // Process each segment separately
+    // ====== INNER STRIPS ======
+    // Process each inner strip segment separately
     for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
-        int startIdx = segment * INNER_LEDS_PER_STRIP;
-        int endIdx = (segment + 1) * INNER_LEDS_PER_STRIP - 1;
+        int segmentStart = segment * INNER_LEDS_PER_STRIP;
 
-        // Cool each LED
-        for (int i = startIdx; i <= endIdx; i++) {
-            // More cooling for inner flames
-            int localPos = i - startIdx;
-            int heightCooling = cooling * 1.2 * (localPos * 1.0 / INNER_LEDS_PER_STRIP);
-            int cooldown = random8(0, heightCooling);
+        // Create temporary array for this segment
+        byte tempHeat[INNER_LEDS_PER_STRIP];
+        memset(tempHeat, 0, INNER_LEDS_PER_STRIP);
 
-            heatInner[i] = qsub8(heatInner[i], cooldown);
+        // Copy current data
+        for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
+            tempHeat[i] = heatInner[segmentStart + i];
         }
 
-        // Sparking at the base of each segment
+        // Cool down every cell a little
+        for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
+            // More cooling at top, less at bottom
+            int coolAmount;
+            if (i < INNER_LEDS_PER_STRIP * 0.3) {
+                coolAmount = random(0, cooling / 4); // Reduced cooling for slower changes
+            } else if (i < INNER_LEDS_PER_STRIP * 0.7) {
+                coolAmount = random(0, cooling / 3);
+            } else {
+                coolAmount = random(0, cooling / 2);
+            }
+
+            if (tempHeat[i] > coolAmount) {
+                tempHeat[i] = tempHeat[i] - coolAmount;
+            } else {
+                tempHeat[i] = 0;
+            }
+        }
+
+        // Heat rises upward - slower mixing for smoother flames
+        for (int i = INNER_LEDS_PER_STRIP - 1; i >= 2; i--) {
+            tempHeat[i] = (tempHeat[i] * 2 + tempHeat[i-1] * 3 + tempHeat[i-2]) / 6;
+        }
+
+        // Randomly ignite new sparks at the bottom
         if (random8() < sparking) {
-            int localY = random8(min(5, INNER_LEDS_PER_STRIP / 5));
-            int sparkHeat = random8(140, 240); // Slightly cooler than core
-            heatInner[startIdx + localY] = qadd8(heatInner[startIdx + localY], sparkHeat);
+            int y = random8(5); // Just the bottom few LEDs
+            tempHeat[y] = tempHeat[y] + random8(40, 100); // Smaller sparks for less activity
         }
 
-        // Heat rises within each segment
-        for (int i = endIdx; i >= startIdx + 2; i--) {
-            heatInner[i] = (heatInner[i - 1] + heatInner[i - 2] + heatInner[i - 2]) / 3;
+        // Copy back to main array
+        for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
+            heatInner[segmentStart + i] = tempHeat[i];
         }
     }
 
-    // 5. OUTER STRIPS (FLAME EDGES)
-    // Process each segment separately
+    // ====== OUTER STRIPS ======
+    // Process each outer strip segment separately
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
-        int startIdx = segment * OUTER_LEDS_PER_STRIP;
-        int endIdx = (segment + 1) * OUTER_LEDS_PER_STRIP - 1;
+        int segmentStart = segment * OUTER_LEDS_PER_STRIP;
 
-        // Cool each LED - outer edges cool more rapidly
-        for (int i = startIdx; i <= endIdx; i++) {
-            // More aggressive cooling for outer edges
-            int localPos = i - startIdx;
-            int heightCooling = cooling * 1.5 * (localPos * 1.0 / OUTER_LEDS_PER_STRIP);
-            int cooldown = random8(0, heightCooling);
+        // Debug outer segment info
+        Serial.print("Processing outer segment ");
+        Serial.print(segment);
+        Serial.print(": Start idx=");
+        Serial.print(segmentStart);
+        Serial.print(", End idx=");
+        Serial.println(segmentStart + OUTER_LEDS_PER_STRIP - 1);
 
-            heatOuter[i] = qsub8(heatOuter[i], cooldown);
+        // Create temporary array for this segment
+        byte tempHeat[OUTER_LEDS_PER_STRIP];
+        memset(tempHeat, 0, OUTER_LEDS_PER_STRIP);
+
+        // Copy current data
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            tempHeat[i] = heatOuter[segmentStart + i];
         }
 
-        // Sparking - less frequent for outer strips
-        if (random8() < sparking * 0.7) {
-            int localY = random8(min(4, OUTER_LEDS_PER_STRIP / 6));
-            int sparkHeat = random8(100, 200); // Cooler than inner strips
-            heatOuter[startIdx + localY] = qadd8(heatOuter[startIdx + localY], sparkHeat);
+        // Cool down every cell a little
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            // More cooling at top, less at bottom
+            int coolAmount;
+            if (i < OUTER_LEDS_PER_STRIP * 0.3) {
+                coolAmount = random(0, cooling / 4); // Reduced cooling for slower changes
+            } else if (i < OUTER_LEDS_PER_STRIP * 0.7) {
+                coolAmount = random(0, cooling / 3);
+            } else {
+                coolAmount = random(0, cooling / 2);
+            }
+
+            if (tempHeat[i] > coolAmount) {
+                tempHeat[i] = tempHeat[i] - coolAmount;
+            } else {
+                tempHeat[i] = 0;
+            }
         }
 
-        // Heat rises but dissipates more quickly on the edges
-        for (int i = endIdx; i >= startIdx + 2; i--) {
-            heatOuter[i] = (heatOuter[i - 1] + heatOuter[i - 2] + heatOuter[i - 3]) / 3;
+        // Heat rises upward - slower mixing for smoother flames
+        for (int i = OUTER_LEDS_PER_STRIP - 1; i >= 2; i--) {
+            tempHeat[i] = (tempHeat[i] * 2 + tempHeat[i-1] * 3 + tempHeat[i-2]) / 6;
+        }
+
+        // Randomly ignite new sparks at the bottom
+        if (random8() < sparking) {
+            int y = random8(5); // Just the bottom few LEDs
+            tempHeat[y] = tempHeat[y] + random8(40, 100); // Smaller sparks for less activity
+        }
+
+        // Copy back to main array
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            heatOuter[segmentStart + i] = tempHeat[i];
+        }
+    }
+
+    // Prevent any isolated bright LEDs at the top
+    for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
+        // Get top pixel index and a few pixels below
+        int topIdx = (segment + 1) * INNER_LEDS_PER_STRIP - 1;
+
+        // If any of the top 5 LEDs are lit but the ones below are not,
+        // douse them to prevent isolated bright spots
+        for (int i = 0; i < 5 && (topIdx - i) > 5; i++) {
+            int curr = topIdx - i;
+            int below = topIdx - i - 2;
+
+            if (heatInner[curr] > 0 && heatInner[below] == 0) {
+                heatInner[curr] = 0;
+            }
+        }
+    }
+
+    // Same for outer strips
+    for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
+        // Get top pixel index and a few pixels below
+        int topIdx = (segment + 1) * OUTER_LEDS_PER_STRIP - 1;
+
+        // If any of the top 5 LEDs are lit but the ones below are not,
+        // douse them to prevent isolated bright spots
+        for (int i = 0; i < 5 && (topIdx - i) > 5; i++) {
+            int curr = topIdx - i;
+            int below = topIdx - i - 2;
+
+            if (heatOuter[curr] > 0 && heatOuter[below] == 0) {
+                heatOuter[curr] = 0;
+            }
         }
     }
 }
 
-void FireEffect::updateEmbers() {
-    unsigned long currentTime = millis();
+uint32_t FireEffect::heatToColor(unsigned char heat) {
+    // Convert heat value to fire colors (red to orange)
 
-    // Create new embers based on fire intensity
-    int emberRate = map(intensity, 0, 100, 2000, 500); // Time between embers in ms
-    if (currentTime - lastEmberTime > emberRate) {
-        createEmber();
-        lastEmberTime = currentTime;
+    CRGB color;
+
+    if (heat <= 0) {
+        // No heat = black
+        color = CRGB(0, 0, 0);
+    }
+    else if (heat < 85) {
+        // Low heat = dark red
+        uint8_t red = map(heat, 0, 85, 0, 160);
+        color = CRGB(red, 0, 0);
+    }
+    else if (heat < 170) {
+        // Medium heat = red
+        uint8_t red = map(heat, 85, 170, 160, 255);
+        uint8_t green = map(heat, 85, 170, 0, 40);
+        color = CRGB(red, green, 0);
+    }
+    else {
+        // High heat = orange-red
+        uint8_t green = map(heat, 170, 255, 40, 80);
+        color = CRGB(255, green, 0);
     }
 
-    // Pre-calculate wind factor for efficiency
-    float windFactor = map(windStrength, 0, 100, 0.0f, 0.05f);
-    float windOffset = (windDirection - 128) / 128.0f; // -1.0 to 1.0
-
-    // Update all ember particles
-    for (auto it = embers.begin(); it != embers.end();) {
-        // Apply physics: gravity counteracted by buoyancy
-        it->vy -= 0.03; // Embers float upward (negative y velocity)
-
-        // Apply wind effect to horizontal movement
-        it->vx += windOffset * windFactor;
-
-        // Update positions
-        it->x += it->vx;
-        it->y += it->vy;
-
-        // Embers cool as they rise - use FastLED's qsub8 for safety
-        it->heat = qsub8(it->heat, 2);
-
-        // Remove embers that are too cool or out of bounds
-        if (it->heat < 5 || it->y < -5 || it->y > LED_STRIP_OUTER_COUNT ||
-            it->x < 0 || it->x >= OUTER_LEDS_PER_STRIP) {
-            it = embers.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-void FireEffect::updateSmoke() {
-    // Smoke simulation will be minimal for now
-    // Smoke will just be handled as a dark haze at the top of the fire
-    // This is a placeholder for more advanced smoke effects
-}
-
-void FireEffect::createEmber() {
-    Ember newEmber;
-
-    // Embers spawn from the base of the fire
-    newEmber.x = random(OUTER_LEDS_PER_STRIP);
-    newEmber.y = OUTER_LEDS_PER_STRIP - random(5);  // Near the bottom
-
-    // Random velocity, mostly upward
-    newEmber.vx = (random(20) - 10) / 40.0f;  // Small horizontal movement
-    newEmber.vy = -random(10, 25) / 80.0f;    // Upward movement
-
-    // Hot embers with some color variation
-    newEmber.heat = random(150, 255);
-    newEmber.hue = random(0, 3000);  // Reddish-orange range
-
-    // Add to ember list
-    embers.push_back(newEmber);
+    return (uint32_t)color.r << 16 | (uint32_t)color.g << 8 | color.b;
 }
 
 void FireEffect::renderFire() {
-    // 1. First clear all strips
+    // Clear all strips first
     leds.clearAll();
 
-    // 2. Render core strip
-    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
-        if (heatCore[i] > 0) {
-            int physicalPos = mapLEDPosition(0, i);
-            leds.getCore()[physicalPos] = HeatColor(heatCore[i]);
+    // Core strip remains off intentionally
+
+    // Render inner strips
+    for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
+        int activePixels = 0;
+
+        for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
+            int idx = segment * INNER_LEDS_PER_STRIP + i;
+
+            if (heatInner[idx] > 0) {
+                activePixels++;
+
+                // Get physical position
+                int physicalPos = mapLEDPosition(1, i, segment);
+                physicalPos += segment * INNER_LEDS_PER_STRIP;
+
+                // Make sure we're in bounds
+                if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
+                    // Set the LED color
+                    uint32_t colorVal = heatToColor(heatInner[idx]);
+                    CRGB color = leds.neoColorToCRGB(colorVal);
+                    leds.getInner()[physicalPos] = color;
+                }
+            }
         }
+
+        Serial.print("Inner segment ");
+        Serial.print(segment);
+        Serial.print(": ");
+        Serial.print(activePixels);
+        Serial.println(" active pixels");
     }
 
-    // 3. Render inner strips
-    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
-        if (heatInner[i] > 0) {
-            int segment = i / INNER_LEDS_PER_STRIP;
-            int localPos = i % INNER_LEDS_PER_STRIP;
-            int physicalPos = mapLEDPosition(1, localPos, segment);
-            physicalPos += segment * INNER_LEDS_PER_STRIP;
-            leds.getInner()[physicalPos] = HeatColor(heatInner[i]);
+    // Render outer strips
+    for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
+        int activePixels = 0;
+
+        // CRITICAL FIX: Explicitly check and print the active heat values for third segment
+        if (segment == 2) {
+            Serial.println("Checking heat values in third outer segment:");
+            for (int i = 0; i < 10; i++) { // Just check first 10 LEDs
+                int idx = segment * OUTER_LEDS_PER_STRIP + i;
+                Serial.print("Pixel ");
+                Serial.print(i);
+                Serial.print(": Heat = ");
+                Serial.println(heatOuter[idx]);
+            }
         }
+
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            int idx = segment * OUTER_LEDS_PER_STRIP + i;
+
+            if (heatOuter[idx] > 0) {
+                activePixels++;
+
+                // Map logical position to physical LED
+                int physicalPos = mapLEDPosition(2, i, segment);
+                physicalPos += segment * OUTER_LEDS_PER_STRIP;
+
+                // Make sure we're in bounds
+                if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
+                    // Set the LED color
+                    uint32_t colorVal = heatToColor(heatOuter[idx]);
+                    CRGB color = leds.neoColorToCRGB(colorVal);
+                    leds.getOuter()[physicalPos] = color;
+
+                    // Debug output for third segment
+                    if (segment == 2 && i < 5) {
+                        Serial.print("Setting third segment LED ");
+                        Serial.print(i);
+                        Serial.print(" (physical: ");
+                        Serial.print(physicalPos);
+                        Serial.print(") to color: ");
+                        Serial.println(colorVal, HEX);
+                    }
+                }
+            }
+        }
+
+        Serial.print("Outer segment ");
+        Serial.print(segment);
+        Serial.print(": ");
+        Serial.print(activePixels);
+        Serial.println(" active pixels");
     }
 
-    // 4. Render outer strips
-    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
-        if (heatOuter[i] > 0) {
-            int segment = i / OUTER_LEDS_PER_STRIP;
-            int localPos = i % OUTER_LEDS_PER_STRIP;
-            int physicalPos = mapLEDPosition(2, localPos, segment);
-            physicalPos += segment * OUTER_LEDS_PER_STRIP;
-            leds.getOuter()[physicalPos] = HeatColor(heatOuter[i]);
-        }
-    }
+    // FORCE-ON TEST for third outer strip
+    if (true) {
+        Serial.println("FORCE-ON TEST: Setting first few LEDs in third outer strip");
+        for (int i = 0; i < 10; i++) {
+            int segment = 2; // Third segment
+            int physicalPos = i + segment * OUTER_LEDS_PER_STRIP;
 
-    // 5. Render embers (as individual bright pixels)
-    for (const auto& ember : embers) {
-        // Calculate which segment this ember belongs to
-        int segment = static_cast<int>(ember.x) / OUTER_LEDS_PER_STRIP;
-        int localPos = static_cast<int>(ember.x) % OUTER_LEDS_PER_STRIP;
-        int verticalPos = static_cast<int>(ember.y);
-
-        // Skip if out of bounds
-        if (segment >= NUM_OUTER_STRIPS || verticalPos >= OUTER_LEDS_PER_STRIP) continue;
-
-        // Create ember color - use FastLED's optimized functions
-        CRGB emberColor;
-
-        // Embers are brighter and more orange-yellow
-        if (ember.heat > 180) {
-            // Very hot embers get a bit of blue/white in the center
-            emberColor = CRGB(255, scale8(ember.heat, 180), scale8(ember.heat - 180, 80));
-        }
-        else {
-            // Normal hot embers are orange/yellow
-            emberColor = CRGB(255, scale8(ember.heat, 150), 0);
-        }
-
-        // Calculate physical position
-        int physicalPos = mapLEDPosition(2, localPos, segment);
-        physicalPos += segment * OUTER_LEDS_PER_STRIP;
-
-        // Draw ember on outer strips if position is valid
-        if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
-            leds.getOuter()[physicalPos] = emberColor;
+            // Set to bright red
+            CRGB color = CRGB(255, 0, 0);
+            leds.getOuter()[physicalPos] = color;
         }
     }
 }
 
 int FireEffect::mapLEDPosition(int stripType, int position, int subStrip) {
-    // Use the LED controller's mapping function
-    return leds.mapPositionToPhysical(stripType, position, subStrip);
+    // Use the LED controller's mapping function with debug output
+    int result = leds.mapPositionToPhysical(stripType, position, subStrip);
+
+    // Debug output for unusual mappings
+    if (stripType == 2 && subStrip == 2 && position < 5) {
+        Serial.print("Mapping outer strip ");
+        Serial.print(subStrip);
+        Serial.print(", position ");
+        Serial.print(position);
+        Serial.print(" to physical position: ");
+        Serial.println(result);
+    }
+
+    return result;
 }
 
 void FireEffect::setIntensity(byte newIntensity) {
     // Clamp intensity to 0-100
     intensity = constrain(newIntensity, 0, 100);
-
-    // Adjust animation speed based on intensity
-    animationSpeed = map(intensity, 0, 100, 0.7, 1.3);
 }
