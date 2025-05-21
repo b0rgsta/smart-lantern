@@ -52,16 +52,36 @@ void SmartLantern::initializeEffects() {
     // Store a reference to the fire effect for temperature override
     fireEffectPtr = fireEffect;
 
-    auto whiteEffect = new SolidColorEffect(leds, leds.color(255, 255, 255)); // White
-    auto warmWhiteEffect = new SolidColorEffect(leds, leds.color(255, 200, 100)); // Warm white
+    auto coolWhiteEffect = new SolidColorEffect(
+        leds,
+        SolidColorEffect::COLOR_NONE, // Core
+        SolidColorEffect::COLD_WHITE, // Inner (off)
+        SolidColorEffect::COLD_WHITE, // Outer (off)
+        SolidColorEffect::COLOR_NONE // Ring
+    );
+
+    auto whiteEffect = new SolidColorEffect(
+        leds,
+        SolidColorEffect::COLOR_NONE, // Core
+        SolidColorEffect::NATURAL_WHITE, // Inner (off)
+        SolidColorEffect::NATURAL_WHITE, // Outer (off)
+        SolidColorEffect::COLOR_NONE // Ring
+    );
+
+    auto warmWhiteEffect = new SolidColorEffect(
+        leds,
+        SolidColorEffect::COLOR_NONE, // Core
+        SolidColorEffect::WARM_WHITE, // Inner (off)
+        SolidColorEffect::WARM_WHITE, // Outer (off)
+        SolidColorEffect::COLOR_NONE // Ring
+    );
 
     // MODE_OFF - empty
 
     // MODE_AMBIENT
+    effects[MODE_AMBIENT].push_back(coolWhiteEffect); // Cool white
     effects[MODE_AMBIENT].push_back(whiteEffect); // Pure white
     effects[MODE_AMBIENT].push_back(warmWhiteEffect); // Warm white
-    effects[MODE_AMBIENT].push_back(rainbowEffect); // Rainbow
-    effects[MODE_AMBIENT].push_back(matrixEffect); // Matrix effect
 
     // MODE_GRADIENT
     effects[MODE_GRADIENT].push_back(rainbowEffect); // Rainbow cycle
@@ -178,7 +198,7 @@ void SmartLantern::nextEffect() {
 
 void SmartLantern::nextMode() {
     // Cycle through modes 1-4 (skipping MODE_OFF)
-    currentMode = static_cast<LanternMode>((currentMode % (effects.size()-1)) + 1);
+    currentMode = static_cast<LanternMode>((currentMode % (effects.size() - 1)) + 1);
     currentEffect = 0; // Reset effect when mode changes
 
     // Save mode and effect to persistent storage
