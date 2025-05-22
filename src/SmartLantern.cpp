@@ -379,18 +379,27 @@ void SmartLantern::processTouchInputs() {
     if (sensors.isNewTouch(POWER_BUTTON_CHANNEL)) {
         powerButtonPressTime = millis(); // Record press time for hold detection
         hasToggled = false; // Reset toggle flag for new press
-        Serial.println("Power button pressed - starting timer");
+
+        // If lantern is currently OFF, turn it ON with a simple touch
+        if (!isPowerOn) {
+            setPower(true); // Turn on immediately
+            hasToggled = true; // Mark that we've already acted on this press
+            Serial.println("Power button touched - turning ON");
+        } else {
+            // If lantern is ON, we need to wait for a hold to turn it OFF
+            Serial.println("Power button pressed - starting hold timer for OFF");
+        }
     }
 
-    // Check if power button is currently being held
-    if (sensors.isTouched(POWER_BUTTON_CHANNEL)) {
+    // Check if power button is currently being held (only matters if lantern is ON)
+    if (sensors.isTouched(POWER_BUTTON_CHANNEL) && isPowerOn) {
         unsigned long currentHoldTime = millis() - powerButtonPressTime;
 
-        // Check if we've reached the 2-second threshold
+        // Check if we've reached the 2-second threshold for turning OFF
         if (currentHoldTime >= POWER_BUTTON_HOLD_TIME && !hasToggled) {
-            togglePower(); // Toggle power state (on->off or off->on)
+            setPower(false); // Turn off after 2-second hold
             hasToggled = true; // Prevent multiple toggles during same hold
-            Serial.println("Power button held for 2 seconds - toggling power");
+            Serial.println("Power button held for 2 seconds - turning OFF");
         }
     }
 
@@ -398,9 +407,9 @@ void SmartLantern::processTouchInputs() {
     if (sensors.isNewRelease(POWER_BUTTON_CHANNEL)) {
         unsigned long pressDuration = millis() - powerButtonPressTime;
 
-        // If released before 2 seconds and haven't toggled, do nothing
-        if (pressDuration < POWER_BUTTON_HOLD_TIME && !hasToggled) {
-            Serial.println("Power button released early - no action");
+        // If released before 2 seconds while lantern was ON and haven't toggled, do nothing
+        if (pressDuration < POWER_BUTTON_HOLD_TIME && !hasToggled && isPowerOn) {
+            Serial.println("Power button released early while ON - no action (need to hold to turn OFF)");
         }
 
         // Note: hasToggled will be reset on next button press
@@ -487,8 +496,8 @@ void SmartLantern::startWindDown() {
 void SmartLantern::updateWindDown() {
     unsigned long currentTime = millis();
 
-    // Control animation speed - update every 30ms for smooth wind-down
-    if (currentTime - lastWindDownTime < 30) {
+    // Control animation speed - update every 10ms for smooth wind-down
+    if (currentTime - lastWindDownTime < 10) {
         return;  // Not time to update yet
     }
 
