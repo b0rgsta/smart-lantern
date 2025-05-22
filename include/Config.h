@@ -47,9 +47,9 @@
 #define TEMP_THRESHOLD_BLUE       5.0   // Blue LED on at 5°C or below
 
 // Light Sensor Thresholds
-#define LIGHT_THRESHOLD_HIGH      300  // High sensitivity threshold
-#define LIGHT_THRESHOLD_MEDIUM    500  // Medium sensitivity threshold
-#define LIGHT_THRESHOLD_LOW       700  // Low sensitivity threshold
+#define LIGHT_THRESHOLD_HIGH      20   // High sensitivity threshold (very dark)
+#define LIGHT_THRESHOLD_MEDIUM    100  // Medium sensitivity threshold (dim)
+#define LIGHT_THRESHOLD_LOW       600  // Low sensitivity threshold (moderate)
 
 // TOF Sensor Parameters
 #define TOF_MIN_DISTANCE          50   // Minimum distance in mm

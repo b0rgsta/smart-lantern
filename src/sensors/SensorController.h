@@ -53,6 +53,9 @@ private:
     float cachedTemperature;
     float cachedHumidity;
 
+    // Debug timing
+    unsigned long lastLightDebugTime; // New variable for debug timing
+
     // Private helper functions
     void updateTouchSensor();
     void updateTemperatureSensor();

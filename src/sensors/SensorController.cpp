@@ -5,7 +5,8 @@ SensorController::SensorController() :
     previousTouchState(0),
     lastTempReadTime(0),
     cachedTemperature(25.0), // Default reasonable values
-    cachedHumidity(50.0)
+    cachedHumidity(50.0),
+    lastLightDebugTime(0)    // Initialize the debug timer
 {
     // Initialize calibration data to zero
     calibrationData = {0};
@@ -50,6 +51,7 @@ bool SensorController::begin() {
 
     // Initialize light sensor pin
     pinMode(LIGHT_SENSOR_PIN, INPUT);
+    Serial.println("Light sensor initialized on pin " + String(LIGHT_SENSOR_PIN));
 
     return allSensorsInitialized;
 }
