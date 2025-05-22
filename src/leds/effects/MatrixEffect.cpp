@@ -2,12 +2,10 @@
 
 #include "MatrixEffect.h"
 
-MatrixEffect::MatrixEffect(LEDController& ledController) :
-    Effect(ledController),
-    baseHue(0),
-    lastUpdate(0),
-    lastHueUpdate(0)
-{
+MatrixEffect::MatrixEffect(LEDController &ledController) : Effect(ledController),
+                                                           baseHue(0),
+                                                           lastUpdate(0),
+                                                           lastHueUpdate(0) {
     // Initialize drops for each strip
     coreDrops.resize(MAX_DROPS_PER_STRIP);
     ringDrops.resize(MAX_DROPS_PER_STRIP);
@@ -30,22 +28,22 @@ MatrixEffect::~MatrixEffect() {
 
 void MatrixEffect::reset() {
     // Reset all drops to inactive
-    for (auto& drop : coreDrops) {
+    for (auto &drop: coreDrops) {
         drop.isActive = false;
     }
 
-    for (auto& drop : ringDrops) {
+    for (auto &drop: ringDrops) {
         drop.isActive = false;
     }
 
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
-        for (auto& drop : innerDrops[i]) {
+        for (auto &drop: innerDrops[i]) {
             drop.isActive = false;
         }
     }
 
     for (int i = 0; i < NUM_OUTER_STRIPS; i++) {
-        for (auto& drop : outerDrops[i]) {
+        for (auto &drop: outerDrops[i]) {
             drop.isActive = false;
         }
     }
@@ -81,7 +79,8 @@ void MatrixEffect::updateColorPalette() {
 
 void MatrixEffect::update() {
     // Target 120 FPS for ultra-smooth matrix drops
-    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
+    if (!shouldUpdate(8)) {
+        // 8ms = 125 FPS (close to 120)
         return;
     }
 
@@ -99,12 +98,14 @@ void MatrixEffect::update() {
         updateStrip(2, i); // Outer strips
     }
 
-    updateStrip(3); // Ring
+    if (!skipRing)
+        updateStrip(3); // Ring
 
     // Update hue for color cycling (slower due to higher frame rate)
     static int hueUpdateCounter = 0;
     hueUpdateCounter++;
-    if (hueUpdateCounter >= 10) {  // Update hue every 10 frames instead of every frame
+    if (hueUpdateCounter >= 10) {
+        // Update hue every 10 frames instead of every frame
         baseHue += HUE_ROTATION_SPEED;
         updateColorPalette();
         hueUpdateCounter = 0;
@@ -115,7 +116,7 @@ void MatrixEffect::update() {
 }
 
 void MatrixEffect::createDrop(int stripType, int subStrip) {
-    std::vector<Drop>* drops;
+    std::vector<Drop> *drops;
     int stripLength;
 
     // Get the appropriate drops array based on strip type
@@ -141,11 +142,11 @@ void MatrixEffect::createDrop(int stripType, int subStrip) {
     }
 
     // Find an inactive drop slot
-    for (auto& drop : *drops) {
+    for (auto &drop: *drops) {
         if (!drop.isActive) {
             // Initialize a new drop
             drop.position = stripLength - 1; // Start at the top
-            drop.speed = MIN_SPEED + ((float)random(100) / 100.0f) * (MAX_SPEED - MIN_SPEED);
+            drop.speed = MIN_SPEED + ((float) random(100) / 100.0f) * (MAX_SPEED - MIN_SPEED);
             drop.hue = random(NUM_COLORS); // Random color from palette
             drop.brightness = 255;
             drop.isActive = true;
@@ -156,7 +157,7 @@ void MatrixEffect::createDrop(int stripType, int subStrip) {
 }
 
 void MatrixEffect::updateStrip(int stripType, int subStrip) {
-    std::vector<Drop>* drops;
+    std::vector<Drop> *drops;
     int stripLength;
 
     // Get the appropriate drops array and strip length
@@ -187,7 +188,7 @@ void MatrixEffect::updateStrip(int stripType, int subStrip) {
     }
 
     // Update and render all active drops
-    for (auto& drop : *drops) {
+    for (auto &drop: *drops) {
         if (drop.isActive) {
             // Update position
             drop.position -= drop.speed;
@@ -221,17 +222,19 @@ void MatrixEffect::updateStrip(int stripType, int subStrip) {
     }
 }
 
-void MatrixEffect::renderDrop(Drop& drop, int stripType, int subStrip, int stripLength) {
+void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int stripLength) {
     // Draw the head of the drop
-    int headPos = (int)drop.position;
+    int headPos = (int) drop.position;
     if (headPos >= 0 && headPos < stripLength) {
         // Map the logical position to physical LED
         int physicalPos = leds.mapPositionToPhysical(stripType, headPos, subStrip);
 
         // For inner/outer strips, adjust for segment offset
-        if (stripType == 1) { // Inner
+        if (stripType == 1) {
+            // Inner
             physicalPos += subStrip * INNER_LEDS_PER_STRIP;
-        } else if (stripType == 2) { // Outer
+        } else if (stripType == 2) {
+            // Outer
             physicalPos += subStrip * OUTER_LEDS_PER_STRIP;
         }
 
@@ -274,15 +277,17 @@ void MatrixEffect::renderDrop(Drop& drop, int stripType, int subStrip, int strip
             int physicalPos = leds.mapPositionToPhysical(stripType, trailPos, subStrip);
 
             // Adjust for segment offset for inner/outer strips
-            if (stripType == 1) { // Inner
+            if (stripType == 1) {
+                // Inner
                 physicalPos += subStrip * INNER_LEDS_PER_STRIP;
-            } else if (stripType == 2) { // Outer
+            } else if (stripType == 2) {
+                // Outer
                 physicalPos += subStrip * OUTER_LEDS_PER_STRIP;
             }
 
             // Calculate trail brightness (decreasing quadratically)
             uint8_t trailBright = ((TRAIL_LENGTH - i) * (TRAIL_LENGTH - i) * TRAIL_BRIGHTNESS) /
-                                (TRAIL_LENGTH * TRAIL_LENGTH);
+                                  (TRAIL_LENGTH * TRAIL_LENGTH);
 
             // Set trail pixel (white with decreasing brightness)
             CRGB trailColor(trailBright, trailBright, trailBright);

@@ -11,6 +11,7 @@
 #include "leds/effects/Effect.h"
 #include "leds/effects/StartupEffect.h"
 #include "leds/effects/FireEffect.h"
+#include "leds/MPR121LEDHandler.h"
 
 // Define modes
 enum LanternMode {
@@ -48,6 +49,8 @@ private:
   SensorController sensors;
 
   Preferences preferences;
+
+  MPR121LEDHandler buttonFeedback;
 
   // Vector to store all effects for each mode
   // effects[mode][effect_index]

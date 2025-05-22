@@ -37,7 +37,8 @@ void GradientEffect::update() {
     applyGradient(leds.getCore(), LED_STRIP_CORE_COUNT, coreGradient);
     applyGradient(leds.getInner(), LED_STRIP_INNER_COUNT, innerGradient);
     applyGradient(leds.getOuter(), LED_STRIP_OUTER_COUNT, outerGradient);
-    applyGradient(leds.getRing(), LED_STRIP_RING_COUNT, ringGradient);
+    if (!skipRing)
+        applyGradient(leds.getRing(), LED_STRIP_RING_COUNT, ringGradient);
 
     // Show all changes
     leds.showAll();

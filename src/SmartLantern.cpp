@@ -21,10 +21,10 @@ SmartLantern::SmartLantern() : isPowerOn(false),
                                powerButtonPressTime(0),
                                lowLightStartTime(0),
                                autoOnTime(0),
-                               isWindingDown(false),        // Initialize wind-down state
-                               windDownPosition(0),         // Start wind-down position
-                               lastWindDownTime(0)          // Initialize timing
-{
+                               isWindingDown(false), // Initialize wind-down state
+                               windDownPosition(0), // Start wind-down position
+                               lastWindDownTime(0), // Initialize timing
+                               buttonFeedback(leds) {
     // Initialize the effects vector structure
     effects.resize(5); // One vector for each mode (0-4)
 
@@ -82,7 +82,7 @@ void SmartLantern::initializeEffects() {
         SolidColorEffect::WARM_WHITE, // Inner (off)
         SolidColorEffect::WARM_WHITE, // Outer (off)
         SolidColorEffect::COLOR_NONE // Ring
-        );
+    );
 
     effects[MODE_AMBIENT].push_back(coolWhiteEffect); // Cool white
     effects[MODE_AMBIENT].push_back(whiteEffect); // Pure white
@@ -95,7 +95,7 @@ void SmartLantern::initializeEffects() {
         Gradient(), // Core off
         GradientEffect::createPurpleToBlueGradient(),
         GradientEffect::createBlueToPurpleGradient(),
-        Gradient()  // Ring off
+        Gradient() // Ring off
     );
 
     // 2. Rainbow but flipped directions for inner and outer
@@ -106,7 +106,7 @@ void SmartLantern::initializeEffects() {
         Gradient(),
         rainbowGradient,
         reversedRainbowGradient,
-        Gradient()  // Ring off
+        Gradient() // Ring off
     );
 
     // 3. Sunset gradient on all strips
@@ -156,7 +156,6 @@ void SmartLantern::initializeEffects() {
     effects[MODE_PARTY].push_back(matrixEffect); // Matrix
     effects[MODE_PARTY].push_back(acceleratingTrailsEffect); // Accelerating trails
     effects[MODE_PARTY].push_back(partyRippleEffect); // Party ripple
-
 }
 
 void SmartLantern::begin() {
@@ -221,6 +220,9 @@ void SmartLantern::begin() {
 void SmartLantern::update() {
     // Update sensors
     sensors.update();
+
+    // Update button feedback handler
+    buttonFeedback.update();
 
     // Update brightness based on TOF sensor (only when powered on)
     if (isPowerOn) {
@@ -287,7 +289,7 @@ void SmartLantern::setPower(bool on) {
         if (on) {
             // Turning ON - restore previous mode and effect (don't override them)
             isPowerOn = true;
-            isWindingDown = false;  // Make sure wind-down is off
+            isWindingDown = false; // Make sure wind-down is off
 
             // Load saved settings with sensible defaults
             auto savedMode = static_cast<LanternMode>(preferences.getUChar("mode", MODE_AMBIENT));
@@ -328,25 +330,28 @@ void SmartLantern::updateEffects() {
     // Don't update effects if power is off
     if (!isPowerOn && !isAutoOn) return;
 
-    // Check for temperature override
-    float currentTemp = sensors.getTemperature();
-    if (tempButtonState > 0 && currentTemp <= TEMP_THRESHOLD_RED) {
-        // Find the fire effect in MODE_ANIMATED
-        for (auto effect: effects[MODE_ANIMATED]) {
-            auto fireEffect = (FireEffect *) (effect);
-            if (fireEffect) {
-                fireEffect->update();
-                return;
-            }
-        }
-    }
-
-    // If powered and in a valid mode with effects
+    // Tell the current effect whether to skip ring updates
     if (currentMode != MODE_OFF && effects[currentMode].size() > 0) {
-        // Use the current effect for this mode
         // Ensure currentEffect is within bounds
         if (currentEffect < 0 || currentEffect >= effects[currentMode].size()) {
             currentEffect = 0;
+        }
+
+        // Tell effect to skip ring if button feedback is active
+        effects[currentMode][currentEffect]->setSkipRing(buttonFeedback.isFeedbackActive());
+
+        // Check for temperature override
+        float currentTemp = sensors.getTemperature();
+        if (tempButtonState > 0 && currentTemp <= TEMP_THRESHOLD_RED) {
+            // Find the fire effect in MODE_ANIMATED
+            for (auto effect: effects[MODE_ANIMATED]) {
+                auto fireEffect = (FireEffect *) (effect);
+                if (fireEffect) {
+                    fireEffect->setSkipRing(buttonFeedback.isFeedbackActive());
+                    fireEffect->update();
+                    return;
+                }
+            }
         }
 
         // Update the current effect
@@ -368,14 +373,21 @@ void SmartLantern::processTouchInputs() {
         // Save temperature button state
         preferences.putUChar("tempBtn", tempButtonState);
 
+        // Show visual feedback on ring LEDs
+        buttonFeedback.showTemperatureState(tempButtonState);
+
         Serial.print("Temperature button state: ");
         Serial.println(tempButtonState);
     }
+
     if (sensors.isNewTouch(LIGHT_BUTTON_CHANNEL)) {
         lightButtonState = (lightButtonState + 1) % 4; // Cycle through states 0-3
 
         // Save light sensitivity button state
         preferences.putUChar("lightBtn", lightButtonState);
+
+        // Show visual feedback on ring LEDs
+        buttonFeedback.showLightState(lightButtonState);
 
         // Debug output with clear state names
         String stateNames[] = {"OFF", "LOW", "MEDIUM", "HIGH"};
@@ -470,7 +482,8 @@ void SmartLantern::handleAutoLighting() {
         // Dark conditions - start timer to turn ON
         if (lowLightStartTime == 0) {
             lowLightStartTime = currentTime;
-        } else if (currentTime - lowLightStartTime >= 5000) { // 1 minute
+        } else if (currentTime - lowLightStartTime >= 5000) {
+            // 1 minute
             // Turn on if not already on
             if (!isPowerOn) {
                 Serial.println("5 seconds of darkness - turning ON");
@@ -482,7 +495,8 @@ void SmartLantern::handleAutoLighting() {
         // Bright conditions - start timer to turn OFF
         if (lowLightStartTime == 0) {
             lowLightStartTime = currentTime;
-        } else if (currentTime - lowLightStartTime >= 5000) { // 1 minute
+        } else if (currentTime - lowLightStartTime >= 5000) {
+            // 1 minute
             // Turn off if currently on
             if (isPowerOn) {
                 Serial.println("5 seconds of brightness - turning OFF");
@@ -495,7 +509,7 @@ void SmartLantern::handleAutoLighting() {
 
 void SmartLantern::startWindDown() {
     isWindingDown = true;
-    windDownPosition = 0;  // Start from position 0
+    windDownPosition = 0; // Start from position 0
     lastWindDownTime = millis();
 
     // Don't change isPowerOn yet - we'll do that when wind-down completes
@@ -508,7 +522,7 @@ void SmartLantern::updateWindDown() {
 
     // Control animation speed - update every 10ms for smooth wind-down
     if (currentTime - lastWindDownTime < 10) {
-        return;  // Not time to update yet
+        return; // Not time to update yet
     }
 
     lastWindDownTime = currentTime;
@@ -516,16 +530,16 @@ void SmartLantern::updateWindDown() {
     // Calculate the maximum position we need to reach
     // We'll wind down all strips simultaneously, so use the longest strip
     int maxPosition = max(max(LED_STRIP_CORE_COUNT, LED_STRIP_INNER_COUNT),
-                         max(LED_STRIP_OUTER_COUNT, LED_STRIP_RING_COUNT));
+                          max(LED_STRIP_OUTER_COUNT, LED_STRIP_RING_COUNT));
 
     // Check if wind-down is complete
     if (windDownPosition >= maxPosition) {
         // Wind-down complete - now actually turn off
         isWindingDown = false;
         isPowerOn = false;
-        isAutoOn = false;  // Also turn off auto-on state
+        isAutoOn = false; // Also turn off auto-on state
         currentMode = MODE_OFF;
-        leds.clearAll();  // Final clear to make sure everything is off
+        leds.clearAll(); // Final clear to make sure everything is off
         leds.showAll();
 
         // Reset brightness in case it was dimmed

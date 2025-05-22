@@ -38,8 +38,14 @@ public:
      * @return String containing the effect name for debugging/display
      */
     virtual String getName() const = 0;
+    /**
+     * Check if ring LEDs should be skipped (for button feedback)
+     * @param buttonFeedbackActive True if button feedback is currently showing
+     */
+    virtual void setSkipRing(bool skipRing) { this->skipRing = skipRing; }
 
 protected:
+    bool skipRing = false;
     LEDController& leds;        // Reference to LED controller for drawing
     unsigned long lastUpdateTime;  // Time of last update in milliseconds
 

@@ -1,20 +1,21 @@
 #include "RainbowEffect.h"
 
-RainbowEffect::RainbowEffect(LEDController& ledController) :
-  Effect(ledController),
-  cycle(0),
-  animationSpeed(30.0f)  // 30 cycles per second for smooth rainbow movement
+RainbowEffect::RainbowEffect(LEDController &ledController) : Effect(ledController),
+                                                             cycle(0),
+                                                             animationSpeed(30.0f)
+// 30 cycles per second for smooth rainbow movement
 {
 }
 
 void RainbowEffect::reset() {
     cycle = 0;
-    lastUpdateTime = millis();  // Reset timing when effect resets
+    lastUpdateTime = millis(); // Reset timing when effect resets
 }
 
 void RainbowEffect::update() {
     // Target 120 FPS for ultra-smooth rainbow animation
-    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
+    if (!shouldUpdate(8)) {
+        // 8ms = 125 FPS (close to 120)
         return;
     }
 
@@ -32,7 +33,7 @@ void RainbowEffect::update() {
     }
 
     // Convert float cycle to integer for hue calculations
-    uint16_t baseHue = (uint16_t)(cycle * 256);
+    uint16_t baseHue = (uint16_t) (cycle * 256);
 
     // Core strip - gradient around the strip
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
@@ -53,10 +54,11 @@ void RainbowEffect::update() {
     }
 
     // Ring strip - gradient around the ring
-    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
-        int pixelHue = baseHue + (i * 65536 / LED_STRIP_RING_COUNT);
-        leds.getRing()[i] = CHSV(pixelHue >> 8, 255, 255);
-    }
+    if (!skipRing)
+        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+            int pixelHue = baseHue + (i * 65536 / LED_STRIP_RING_COUNT);
+            leds.getRing()[i] = CHSV(pixelHue >> 8, 255, 255);
+        }
 
     // Show the LEDs
     leds.showAll();
