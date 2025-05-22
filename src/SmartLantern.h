@@ -9,13 +9,8 @@
 #include "leds/LEDController.h"
 #include "sensors/SensorController.h"
 #include "leds/effects/Effect.h"
-#include "leds/effects/StartupEffect.h"  // Add this back for the startup animation
+#include "leds/effects/StartupEffect.h"
 #include "leds/effects/FireEffect.h"
-#include "leds/effects/PartyRippleEffect.h"
-#include "leds/effects/RainbowEffect.h"
-#include "leds/effects/TrailsEffect.h"
-#include "leds/effects/MatrixEffect.h"
-#include "leds/effects/AcceleratingTrailsEffect.h"
 
 // Define modes
 enum LanternMode {
@@ -70,6 +65,11 @@ private:
   int tempButtonState;
   int lightButtonState;
 
+  // Wind-down effect variables
+  bool isWindingDown;              // True when performing wind-down animation
+  int windDownPosition;            // Current position in wind-down sequence
+  unsigned long lastWindDownTime;  // Last time we updated wind-down animation
+
   // Timing variables
   unsigned long powerButtonPressTime;
   unsigned long lowLightStartTime;
@@ -80,6 +80,8 @@ private:
   void handleAutoLighting();
   void updateEffects();
   void initializeEffects(); // Helper method to initialize all effects
+  void updateWindDown();     // Handle the wind-down animation
+  void startWindDown();      // Start the wind-down sequence
 };
 
 #endif // SMART_LANTERN_H

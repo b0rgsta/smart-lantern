@@ -20,7 +20,11 @@ SmartLantern::SmartLantern() : isPowerOn(false),
                                lightButtonState(0),
                                powerButtonPressTime(0),
                                lowLightStartTime(0),
-                               autoOnTime(0) {
+                               autoOnTime(0),
+                               isWindingDown(false),        // Initialize wind-down state
+                               windDownPosition(0),         // Start wind-down position
+                               lastWindDownTime(0)          // Initialize timing
+{
     // Initialize the effects vector structure
     effects.resize(5); // One vector for each mode (0-4)
 
@@ -221,8 +225,13 @@ void SmartLantern::update() {
     // Handle auto on/off based on light sensor
     handleAutoLighting();
 
-    // Update the current effect
-    updateEffects();
+    // If we're in wind-down mode, handle that instead of normal effects
+    if (isWindingDown) {
+        updateWindDown();
+    } else {
+        // Update the current effect normally
+        updateEffects();
+    }
 }
 
 void SmartLantern::setMode(LanternMode mode) {
@@ -267,20 +276,39 @@ void SmartLantern::nextMode() {
 
 void SmartLantern::setPower(bool on) {
     if (on != isPowerOn) {
-        isPowerOn = on;
+        if (on) {
+            // Turning ON - restore previous mode and effect (don't override them)
+            isPowerOn = true;
+            isWindingDown = false;  // Make sure wind-down is off
 
-        if (isPowerOn) {
-            // Turn on - set to default mode
-            currentMode = MODE_ANIMATED;
-            leds.setBrightness(77); // 30% brightness
+            // Load saved settings with sensible defaults
+            LanternMode savedMode = (LanternMode) preferences.getUChar("mode", MODE_AMBIENT);
+            int savedEffect = preferences.getUChar("effect", 0);
+            tempButtonState = preferences.getUChar("tempBtn", 0);
+            lightButtonState = preferences.getUChar("lightBtn", 0);
+
+            // Set mode and effect (default to Ambient white if no valid saved data)
+            if (savedMode >= MODE_OFF && savedMode <= MODE_PARTY) {
+                currentMode = savedMode;
+            } else {
+                currentMode = MODE_AMBIENT; // Default to Ambient
+            }
+
+            if (savedEffect >= 0 && savedEffect <= 4) {
+                currentEffect = savedEffect;
+            } else {
+                currentEffect = 0; // Default to first effect (white for Ambient mode)
+            }
+
+            Serial.print("Power turned ON - restored to mode: ");
+            Serial.print(currentMode);
+            Serial.print(", effect: ");
+            Serial.println(currentEffect);
         } else {
-            // Turn off
-            currentMode = MODE_OFF;
-            leds.clearAll();
+            // Turning OFF - start wind-down animation
+            startWindDown();
+            Serial.println("Starting power wind-down sequence");
         }
-
-        Serial.print("Power turned ");
-        Serial.println(isPowerOn ? "ON" : "OFF");
     }
 }
 
@@ -322,6 +350,9 @@ void SmartLantern::updateEffects() {
 }
 
 void SmartLantern::processTouchInputs() {
+    // Static variable to track if we've already toggled during this button press
+    static bool hasToggled = false;
+
     // Check for temperature button
     if (sensors.isNewTouch(TEMP_BUTTON_CHANNEL)) {
         tempButtonState = (tempButtonState + 1) % 4; // Cycle through states 0-3
@@ -344,33 +375,43 @@ void SmartLantern::processTouchInputs() {
         Serial.println(lightButtonState);
     }
 
-
-    // Check for power button press
+    // Check for power button press (start of touch)
     if (sensors.isNewTouch(POWER_BUTTON_CHANNEL)) {
-        powerButtonPressTime = millis(); // Record press time for long-press detection
+        powerButtonPressTime = millis(); // Record press time for hold detection
+        hasToggled = false; // Reset toggle flag for new press
+        Serial.println("Power button pressed - starting timer");
     }
 
-    // Check for power button release
-    if (sensors.isNewRelease(POWER_BUTTON_CHANNEL)) {
-        unsigned long pressDuration = millis() - powerButtonPressTime;
+    // Check if power button is currently being held
+    if (sensors.isTouched(POWER_BUTTON_CHANNEL)) {
+        unsigned long currentHoldTime = millis() - powerButtonPressTime;
 
-        if (pressDuration >= POWER_BUTTON_HOLD_TIME) {
-            // Long press - toggle power
-            togglePower();
-        } else {
-            // Short press - turn on if off
-            if (!isPowerOn) {
-                setPower(true);
-            }
+        // Check if we've reached the 2-second threshold
+        if (currentHoldTime >= POWER_BUTTON_HOLD_TIME && !hasToggled) {
+            togglePower(); // Toggle power state (on->off or off->on)
+            hasToggled = true; // Prevent multiple toggles during same hold
+            Serial.println("Power button held for 2 seconds - toggling power");
         }
     }
 
-    // Check for mode button
+    // Check for power button release (end of touch)
+    if (sensors.isNewRelease(POWER_BUTTON_CHANNEL)) {
+        unsigned long pressDuration = millis() - powerButtonPressTime;
+
+        // If released before 2 seconds and haven't toggled, do nothing
+        if (pressDuration < POWER_BUTTON_HOLD_TIME && !hasToggled) {
+            Serial.println("Power button released early - no action");
+        }
+
+        // Note: hasToggled will be reset on next button press
+    }
+
+    // Check for mode button (only works when powered on)
     if (sensors.isNewTouch(MODE_BUTTON_CHANNEL) && isPowerOn) {
         nextMode();
     }
 
-    // Check for effect button
+    // Check for effect button (only works when powered on)
     if (sensors.isNewTouch(EFFECT_BUTTON_CHANNEL) && isPowerOn) {
         nextEffect();
     }
@@ -430,5 +471,92 @@ void SmartLantern::handleAutoLighting() {
             uint8_t brightness = 77 - (dimTime * 77 / DIMMING_DURATION);
             leds.setBrightness(brightness);
         }
+    }
+}
+
+void SmartLantern::startWindDown() {
+    isWindingDown = true;
+    windDownPosition = 0;  // Start from position 0
+    lastWindDownTime = millis();
+
+    // Don't change isPowerOn yet - we'll do that when wind-down completes
+    Serial.println("Wind-down sequence started");
+}
+
+// New method to handle the wind-down animation:
+void SmartLantern::updateWindDown() {
+    unsigned long currentTime = millis();
+
+    // Control animation speed - update every 30ms for smooth wind-down
+    if (currentTime - lastWindDownTime < 30) {
+        return;  // Not time to update yet
+    }
+
+    lastWindDownTime = currentTime;
+
+    // Calculate the maximum position we need to reach
+    // We'll wind down all strips simultaneously, so use the longest strip
+    int maxPosition = max(max(LED_STRIP_CORE_COUNT, LED_STRIP_INNER_COUNT),
+                         max(LED_STRIP_OUTER_COUNT, LED_STRIP_RING_COUNT));
+
+    // Check if wind-down is complete
+    if (windDownPosition >= maxPosition) {
+        // Wind-down complete - now actually turn off
+        isWindingDown = false;
+        isPowerOn = false;
+        currentMode = MODE_OFF;
+        leds.clearAll();  // Final clear to make sure everything is off
+        leds.showAll();
+        Serial.println("Wind-down complete - power OFF");
+        return;
+    }
+
+    // Clear LEDs from the end (working backwards)
+    // For each strip, calculate the position to clear
+
+    // Core strip - clear from end to start
+    if (windDownPosition < LED_STRIP_CORE_COUNT) {
+        int clearPos = LED_STRIP_CORE_COUNT - 1 - windDownPosition;
+        leds.getCore()[clearPos] = CRGB::Black;
+    }
+
+    // Inner strips - clear each segment from end to start
+    for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
+        if (windDownPosition < INNER_LEDS_PER_STRIP) {
+            int clearPos = (segment * INNER_LEDS_PER_STRIP) + (INNER_LEDS_PER_STRIP - 1 - windDownPosition);
+            if (clearPos < LED_STRIP_INNER_COUNT) {
+                leds.getInner()[clearPos] = CRGB::Black;
+            }
+        }
+    }
+
+    // Outer strips - clear each segment from end to start
+    for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
+        if (windDownPosition < OUTER_LEDS_PER_STRIP) {
+            int clearPos = (segment * OUTER_LEDS_PER_STRIP) + (OUTER_LEDS_PER_STRIP - 1 - windDownPosition);
+            if (clearPos < LED_STRIP_OUTER_COUNT) {
+                leds.getOuter()[clearPos] = CRGB::Black;
+            }
+        }
+    }
+
+    // Ring strip - clear from end to start
+    if (windDownPosition < LED_STRIP_RING_COUNT) {
+        int clearPos = LED_STRIP_RING_COUNT - 1 - windDownPosition;
+        leds.getRing()[clearPos] = CRGB::Black;
+    }
+
+    // Show the changes
+    leds.showAll();
+
+    // Move to next position for next update
+    windDownPosition++;
+
+    // Debug output every 10 positions
+    if (windDownPosition % 10 == 0) {
+        Serial.print("Wind-down progress: ");
+        Serial.print(windDownPosition);
+        Serial.print(" / ");
+        Serial.println(maxPosition);
     }
 }
