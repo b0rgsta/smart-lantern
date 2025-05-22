@@ -36,10 +36,10 @@
 
 // Timing Parameters (in milliseconds)
 #define POWER_BUTTON_HOLD_TIME    2000  // 2 seconds to turn off
-#define LIGHT_THRESHOLD_TIME      300000 // 5 minutes before auto-on
-#define AUTO_OFF_TIME             14400000 // 4 hours auto-off time
-#define DIMMING_START_TIME        12600000 // 3.5 hours (when dimming starts)
-#define DIMMING_DURATION          1800000 // 30 minutes dimming duration
+#define LIGHT_THRESHOLD_TIME      3000 // 3 seconds before auto-on
+#define AUTO_OFF_TIME             5000 // 4 hours auto-off time
+#define DIMMING_START_TIME        3500 // 3.5 hours (when dimming starts)
+#define DIMMING_DURATION          1500 // 30 minutes dimming duration
 
 // Temperature Thresholds (in Celsius)
 #define TEMP_THRESHOLD_RED        18.0  // Red LED on at 18°C or below
@@ -48,7 +48,7 @@
 
 // Light Sensor Thresholds
 #define LIGHT_THRESHOLD_HIGH      20   // High sensitivity threshold (very dark)
-#define LIGHT_THRESHOLD_MEDIUM    100  // Medium sensitivity threshold (dim)
+#define LIGHT_THRESHOLD_MEDIUM    150  // Medium sensitivity threshold (dim)
 #define LIGHT_THRESHOLD_LOW       600  // Low sensitivity threshold (moderate)
 
 // TOF Sensor Parameters

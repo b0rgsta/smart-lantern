@@ -363,16 +363,23 @@ void SmartLantern::processTouchInputs() {
         Serial.print("Temperature button state: ");
         Serial.println(tempButtonState);
     }
-
-    // Check for light sensitivity button
     if (sensors.isNewTouch(LIGHT_BUTTON_CHANNEL)) {
         lightButtonState = (lightButtonState + 1) % 4; // Cycle through states 0-3
 
         // Save light sensitivity button state
         preferences.putUChar("lightBtn", lightButtonState);
 
-        Serial.print("Light sensitivity state: ");
-        Serial.println(lightButtonState);
+        // Debug output with clear state names
+        String stateNames[] = {"OFF", "LOW", "MEDIUM", "HIGH"};
+        Serial.print("Light sensitivity changed to: ");
+        Serial.print(stateNames[lightButtonState]);
+        Serial.print(" (state ");
+        Serial.print(lightButtonState);
+        Serial.println(")");
+
+        // Reset timer when sensitivity changes
+        lowLightStartTime = 0;
+        Serial.println("Light sensor timer reset due to sensitivity change");
     }
 
     // Check for power button press (start of touch)
@@ -427,58 +434,57 @@ void SmartLantern::processTouchInputs() {
 }
 
 void SmartLantern::handleAutoLighting() {
-    int lightLevel = sensors.getLightLevel();
-    bool isLowLight = false;
+    // Only do anything if light sensor is active (not OFF)
+    if (lightButtonState == 0) {
+        return;
+    }
 
-    // Determine light threshold based on lightButtonState
+    int lightLevel = sensors.getLightLevel();
+    int currentThreshold = 0;
+    String sensitivityName = "OFF";
+
+    // Get current threshold
     switch (lightButtonState) {
-        case 1: // High sensitivity
-            isLowLight = lightLevel < LIGHT_THRESHOLD_HIGH;
+        case 1: // Low sensitivity
+            currentThreshold = LIGHT_THRESHOLD_LOW;
+            sensitivityName = "LOW";
             break;
         case 2: // Medium sensitivity
-            isLowLight = lightLevel < LIGHT_THRESHOLD_MEDIUM;
+            currentThreshold = LIGHT_THRESHOLD_MEDIUM;
+            sensitivityName = "MEDIUM";
             break;
-        case 3: // Low sensitivity
-            isLowLight = lightLevel < LIGHT_THRESHOLD_LOW;
+        case 3: // High sensitivity
+            currentThreshold = LIGHT_THRESHOLD_HIGH;
+            sensitivityName = "HIGH";
             break;
-        default: // Off
-            isLowLight = false;
     }
 
-    // Handle low light state
-    if (isLowLight) {
-        if (lowLightStartTime == 0) {
-            // Start the timer
-            lowLightStartTime = millis();
-        } else if (millis() - lowLightStartTime > LIGHT_THRESHOLD_TIME && !isAutoOn) {
-            // Timer elapsed, turn on automatically
-            isAutoOn = true;
-            autoOnTime = millis();
-            currentMode = MODE_AMBIENT;
-            currentEffect = 0;
+    bool isDark = lightLevel < currentThreshold;
+    unsigned long currentTime = millis();
 
-            Serial.println("Auto-on triggered due to low light");
+    if (isDark) {
+        // Dark conditions - start timer to turn ON
+        if (lowLightStartTime == 0) {
+            lowLightStartTime = currentTime;
+        } else if (currentTime - lowLightStartTime >= 5000) { // 1 minute
+            // Turn on if not already on
+            if (!isPowerOn) {
+                Serial.println("5 seconds of darkness - turning ON");
+                setPower(true);
+            }
+            lowLightStartTime = 0; // Reset timer
         }
     } else {
-        // Reset the timer if light level is high
-        lowLightStartTime = 0;
-    }
-
-    // Handle auto-off timer
-    if (isAutoOn) {
-        unsigned long elapsedTime = millis() - autoOnTime;
-
-        if (elapsedTime > AUTO_OFF_TIME) {
-            // Auto-off time reached
-            isAutoOn = false;
-            currentMode = MODE_OFF;
-
-            Serial.println("Auto-off triggered");
-        } else if (elapsedTime > DIMMING_START_TIME) {
-            // Dimming phase
-            unsigned long dimTime = elapsedTime - DIMMING_START_TIME;
-            uint8_t brightness = 77 - (dimTime * 77 / DIMMING_DURATION);
-            leds.setBrightness(brightness);
+        // Bright conditions - start timer to turn OFF
+        if (lowLightStartTime == 0) {
+            lowLightStartTime = currentTime;
+        } else if (currentTime - lowLightStartTime >= 5000) { // 1 minute
+            // Turn off if currently on
+            if (isPowerOn) {
+                Serial.println("5 seconds of brightness - turning OFF");
+                setPower(false);
+            }
+            lowLightStartTime = 0; // Reset timer
         }
     }
 }
@@ -513,16 +519,19 @@ void SmartLantern::updateWindDown() {
         // Wind-down complete - now actually turn off
         isWindingDown = false;
         isPowerOn = false;
+        isAutoOn = false;  // Also turn off auto-on state
         currentMode = MODE_OFF;
         leds.clearAll();  // Final clear to make sure everything is off
         leds.showAll();
+
+        // Reset brightness in case it was dimmed
+        leds.setBrightness(77); // Reset to default brightness
+
         Serial.println("Wind-down complete - power OFF");
         return;
     }
 
     // Clear LEDs from the end (working backwards)
-    // For each strip, calculate the position to clear
-
     // Core strip - clear from end to start
     if (windDownPosition < LED_STRIP_CORE_COUNT) {
         int clearPos = LED_STRIP_CORE_COUNT - 1 - windDownPosition;
@@ -561,8 +570,8 @@ void SmartLantern::updateWindDown() {
     // Move to next position for next update
     windDownPosition++;
 
-    // Debug output every 10 positions
-    if (windDownPosition % 10 == 0) {
+    // Debug output every 20 positions to reduce spam
+    if (windDownPosition % 20 == 0) {
         Serial.print("Wind-down progress: ");
         Serial.print(windDownPosition);
         Serial.print(" / ");
