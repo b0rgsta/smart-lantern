@@ -3,29 +3,44 @@
 SensorController::SensorController() :
     currentTouchState(0),
     previousTouchState(0),
-    lastTempReadTime(0),
     cachedTemperature(25.0), // Default reasonable values
     cachedHumidity(50.0),
-    lastLightDebugTime(0),    // Initialize the debug timer
+    lastValidDistance(-1),    // No valid distance yet
+    consecutiveFailures(0),   // No failures yet
+    sensorTaskHandle(nullptr),
+    sensorTaskRunning(false),
+    lastTempReadTime(0),
+    lastLightDebugTime(0),
     tofDebugEnabled(false),   // TOF debugging starts disabled
     tofInitialized(false),    // Track if TOF sensor initialized properly
-    lastTOFDebugTime(0),      // Initialize TOF debug timer
-    lastValidDistance(-1),    // No valid distance yet
-    consecutiveFailures(0)    // No failures yet
+    lastTOFDebugTime(0)       // Initialize TOF debug timer
 {
     // Initialize calibration data to zero
     calibrationData = {0};
+
+    // Create mutexes for thread-safe access to shared data
+    touchMutex = xSemaphoreCreateMutex();
+    tempMutex = xSemaphoreCreateMutex();
+    imuMutex = xSemaphoreCreateMutex();
+    tofMutex = xSemaphoreCreateMutex();
+
+    // Check if mutex creation was successful
+    if (!touchMutex || !tempMutex || !imuMutex || !tofMutex) {
+        Serial.println("ERROR: Failed to create sensor mutexes!");
+    }
 }
 
 bool SensorController::begin() {
     bool allSensorsInitialized = true;
+
+    Serial.println("=== INITIALIZING SENSORS ===");
 
     // Initialize MPR121 touch sensor
     if (!touchSensor.begin(MPR121_I2C_ADDR)) {
         Serial.println("MPR121 not found, check wiring!");
         allSensorsInitialized = false;
     } else {
-        Serial.println("MPR121 touch sensor initialized");
+        Serial.println("✓ MPR121 touch sensor initialized");
     }
 
     // Initialize AHT10 temperature sensor
@@ -33,7 +48,7 @@ bool SensorController::begin() {
         Serial.println("AHT10 not found, check wiring!");
         allSensorsInitialized = false;
     } else {
-        Serial.println("AHT10 temperature sensor initialized");
+        Serial.println("✓ AHT10 temperature sensor initialized");
     }
 
     // Initialize BMI160 via FastIMU
@@ -43,7 +58,7 @@ bool SensorController::begin() {
         Serial.println(err);
         allSensorsInitialized = false;
     } else {
-        Serial.println("BMI160 gyroscope initialized via FastIMU");
+        Serial.println("✓ BMI160 gyroscope initialized via FastIMU");
     }
 
     // Initialize TOF sensor with detailed debugging
@@ -60,7 +75,7 @@ bool SensorController::begin() {
         tofInitialized = false;
         allSensorsInitialized = false;
     } else {
-        Serial.println("SUCCESS: VL53L0X TOF sensor initialized!");
+        Serial.println("✓ VL53L0X TOF sensor initialized!");
 
         // Test a quick measurement to make sure it's really working
         VL53L0X_RangingMeasurementData_t measure;
@@ -79,7 +94,7 @@ bool SensorController::begin() {
 
     // Initialize light sensor pin
     pinMode(LIGHT_SENSOR_PIN, INPUT);
-    Serial.println("Light sensor initialized on pin " + String(LIGHT_SENSOR_PIN));
+    Serial.println("✓ Light sensor initialized on pin " + String(LIGHT_SENSOR_PIN));
 
     // Print summary
     Serial.println("=== SENSOR INITIALIZATION SUMMARY ===");
@@ -89,121 +104,209 @@ bool SensorController::begin() {
     Serial.print("TOF Sensor (VL53L0X): "); Serial.println(tofInitialized ? "OK" : "FAILED");
     Serial.print("Light Sensor: OK (Pin "); Serial.print(LIGHT_SENSOR_PIN); Serial.println(")");
 
+    // If sensor initialization was successful, start the sensor task on core 0
+    if (allSensorsInitialized) {
+        Serial.println("=== STARTING DUAL-CORE OPERATION ===");
+        Serial.println("Core 1: LED effects and main logic");
+        Serial.println("Core 0: Sensor processing task");
+
+        // Create the sensor task and pin it to core 0
+        // Parameters: task function, name, stack size, parameter, priority, handle, core
+        BaseType_t taskCreated = xTaskCreatePinnedToCore(
+            sensorTaskWrapper,      // Function to run
+            "SensorTask",           // Task name for debugging
+            4096,                   // Stack size (4KB should be plenty)
+            this,                   // Parameter to pass (this object)
+            1,                      // Priority (1 = low priority, good for background tasks)
+            &sensorTaskHandle,      // Task handle
+            0                       // Pin to core 0 (core 1 runs main loop)
+        );
+
+        if (taskCreated == pdPASS) {
+            sensorTaskRunning = true;
+            Serial.println("✓ Sensor task created successfully on core 0");
+        } else {
+            Serial.println("ERROR: Failed to create sensor task!");
+            allSensorsInitialized = false;
+        }
+    }
+
     return allSensorsInitialized;
 }
 
+// Static wrapper function required by FreeRTOS
+// This just calls the actual member function
+void SensorController::sensorTaskWrapper(void* parameter) {
+    // Cast the parameter back to SensorController object
+    SensorController* sensor = static_cast<SensorController*>(parameter);
+
+    // Call the actual sensor processing function
+    sensor->sensorTaskFunction();
+}
+
+// This function runs continuously on core 0
+void SensorController::sensorTaskFunction() {
+    Serial.println("Sensor task started on core 0");
+
+    // Main sensor processing loop
+    while (sensorTaskRunning) {
+        // Get current time for timing comparisons
+        unsigned long currentTime = millis();
+
+        // Always update touch sensor (needed for user input)
+        updateTouchSensor();
+
+        // Update IMU regularly as it's needed for lantern orientation
+        updateIMU();
+
+        // Check if it's time to update temperature (every 20 seconds)
+        if (currentTime - lastTempReadTime >= tempReadInterval) {
+            updateTemperatureSensor();
+            lastTempReadTime = currentTime;
+        }
+
+        // Update TOF sensor every 500ms (plenty fast for hand detection)
+        static unsigned long lastTofUpdate = 0;
+        if (currentTime - lastTofUpdate >= 500) {
+            updateTOF();
+            lastTofUpdate = currentTime;
+        }
+
+        // Print TOF debugging info if enabled
+        if (tofDebugEnabled && (currentTime - lastTOFDebugTime >= tofDebugInterval)) {
+            printTOFStatus();
+            lastTOFDebugTime = currentTime;
+        }
+
+        // Small delay to prevent task from hogging the CPU
+        // This also allows other tasks on core 0 to run if needed
+        vTaskDelay(pdMS_TO_TICKS(10)); // 10ms delay = 100Hz update rate
+    }
+
+    // Clean up when task is ending
+    Serial.println("Sensor task ending on core 0");
+    vTaskDelete(NULL); // Delete this task
+}
+
+// The main update function now just checks if the sensor task is running
+// All actual sensor processing happens on core 0
 void SensorController::update() {
-    // Always update touch sensor (needed for user input)
-    updateTouchSensor();
+    // This function is called from core 1 (main loop)
+    // But all the actual sensor processing happens on core 0
+    // So we don't need to do anything here except maybe check task health
 
-    // Update IMU regularly as it's needed for lantern orientation
-    updateIMU();
-
-    // Check if it's time to update temperature
-    unsigned long currentTime = millis();
-    if (currentTime - lastTempReadTime >= tempReadInterval) {
-        updateTemperatureSensor();
-        lastTempReadTime = currentTime;
-    }
-
-    // Update TOF sensor less frequently too, every ~500ms should be plenty
-    static unsigned long lastTofUpdate = 0;
-    if (currentTime - lastTofUpdate >= 500) {
-        updateTOF();
-        lastTofUpdate = currentTime;
-    }
-
-    // Print TOF debugging info if enabled
-    if (tofDebugEnabled && (currentTime - lastTOFDebugTime >= tofDebugInterval)) {
-        printTOFStatus();
-        lastTOFDebugTime = currentTime;
+    // Optional: Check if sensor task is still running
+    if (sensorTaskHandle && eTaskGetState(sensorTaskHandle) == eDeleted) {
+        Serial.println("WARNING: Sensor task has stopped unexpectedly!");
+        sensorTaskRunning = false;
     }
 }
 
-void SensorController::updateTouchSensor() {
-    previousTouchState = currentTouchState;
-    currentTouchState = touchSensor.touched();
-}
+void SensorController::stopSensorTask() {
+    if (sensorTaskRunning && sensorTaskHandle) {
+        Serial.println("Stopping sensor task...");
+        sensorTaskRunning = false;
 
-void SensorController::updateTemperatureSensor() {
-    sensors_event_t humidity, temp;
-    tempSensor.getEvent(&humidity, &temp);
+        // Wait a moment for the task to finish cleanly
+        vTaskDelay(pdMS_TO_TICKS(100));
 
-    // Store values in cache
-    cachedTemperature = temp.temperature;
-    cachedHumidity = humidity.relative_humidity;
-}
+        // If task hasn't stopped by itself, force delete it
+        if (eTaskGetState(sensorTaskHandle) != eDeleted) {
+            vTaskDelete(sensorTaskHandle);
+        }
 
-void SensorController::updateIMU() {
-    imu.update();
-    imu.getAccel(&accelData);
-    imu.getGyro(&gyroData);
-}
-
-void SensorController::updateTOF() {
-    // Only try to update if sensor was initialized properly
-    if (!tofInitialized) {
-        return;
+        sensorTaskHandle = nullptr;
+        Serial.println("Sensor task stopped");
     }
-
-    // This method doesn't do much right now, but it's here for future expansion
-    // The actual reading happens in getDistance() when needed
 }
+
+// === THREAD-SAFE ACCESS FUNCTIONS ===
+// These functions are called from core 1 but access data updated on core 0
 
 bool SensorController::isTouched(int channel) const {
-    return (currentTouchState & (1 << channel));
+    bool result = false;
+    if (takeMutex(touchMutex, pdMS_TO_TICKS(10))) { // 10ms timeout
+        result = (currentTouchState & (1 << channel));
+        giveMutex(touchMutex);
+    }
+    return result;
 }
 
 bool SensorController::isNewTouch(int channel) const {
-    return (currentTouchState & (1 << channel)) && !(previousTouchState & (1 << channel));
+    bool result = false;
+    if (takeMutex(touchMutex, pdMS_TO_TICKS(10))) {
+        result = (currentTouchState & (1 << channel)) && !(previousTouchState & (1 << channel));
+        giveMutex(touchMutex);
+    }
+    return result;
 }
 
 bool SensorController::isNewRelease(int channel) const {
-    return !(currentTouchState & (1 << channel)) && (previousTouchState & (1 << channel));
+    bool result = false;
+    if (takeMutex(touchMutex, pdMS_TO_TICKS(10))) {
+        result = !(currentTouchState & (1 << channel)) && (previousTouchState & (1 << channel));
+        giveMutex(touchMutex);
+    }
+    return result;
 }
 
 float SensorController::getTemperature() {
-    // Return cached value instead of reading every time
-    return cachedTemperature;
+    float result = 25.0; // Default fallback
+    if (takeMutex(tempMutex, pdMS_TO_TICKS(10))) {
+        result = cachedTemperature;
+        giveMutex(tempMutex);
+    }
+    return result;
 }
 
 float SensorController::getHumidity() {
-    // Return cached value instead of reading every time
-    return cachedHumidity;
+    float result = 50.0; // Default fallback
+    if (takeMutex(tempMutex, pdMS_TO_TICKS(10))) {
+        result = cachedHumidity;
+        giveMutex(tempMutex);
+    }
+    return result;
 }
 
-bool SensorController::isUpsideDown() const{
-    // Z-axis value will be negative when upside down
-    return accelData.accelZ < -0.5;
+bool SensorController::isUpsideDown() const {
+    bool result = false;
+    if (takeMutex(imuMutex, pdMS_TO_TICKS(10))) {
+        // Z-axis value will be negative when upside down
+        result = accelData.accelZ < -0.5;
+        giveMutex(imuMutex);
+    }
+    return result;
 }
 
-int SensorController::getLightLevel() {
-    return analogRead(LIGHT_SENSOR_PIN);
+AccelData SensorController::getAccelData() {
+    AccelData result = {0}; // Default fallback
+    if (takeMutex(imuMutex, pdMS_TO_TICKS(10))) {
+        result = accelData;
+        giveMutex(imuMutex);
+    }
+    return result;
+}
+
+GyroData SensorController::getGyroData() {
+    GyroData result = {0}; // Default fallback
+    if (takeMutex(imuMutex, pdMS_TO_TICKS(10))) {
+        result = gyroData;
+        giveMutex(imuMutex);
+    }
+    return result;
 }
 
 int SensorController::getDistance() {
-    // Return -1 immediately if sensor wasn't initialized
-    if (!tofInitialized) {
-        return -1;
+    int result = -1; // Default fallback
+    if (takeMutex(tofMutex, pdMS_TO_TICKS(10))) {
+        result = lastValidDistance;
+        giveMutex(tofMutex);
     }
-
-    VL53L0X_RangingMeasurementData_t measure;
-    tofSensor.rangingTest(&measure, false);
-
-    if (measure.RangeStatus != 4) {
-        // Valid measurement
-        lastValidDistance = measure.RangeMilliMeter;
-        consecutiveFailures = 0; // Reset failure counter
-        return measure.RangeMilliMeter;
-    } else {
-        // Invalid measurement
-        consecutiveFailures++;
-        return -1; // Invalid/out of range
-    }
+    return result;
 }
 
 int SensorController::getBrightnessFromDistance() {
-    int distance = getDistance();
+    int distance = getDistance(); // This already uses mutex protection
 
     // If no valid reading, return -1 to indicate no hand detected
     if (distance == -1) {
@@ -237,14 +340,79 @@ int SensorController::getBrightnessFromDistance() {
     return -1;
 }
 
-// NEW METHOD: Check if hand is in valid detection range
 bool SensorController::isHandDetected() {
     int brightness = getBrightnessFromDistance();
     // Hand is detected if we get a valid brightness value (not -1)
     return brightness != -1;
 }
 
-// NEW METHOD: Enable or disable TOF debugging
+// Static function - doesn't need mutex protection since it's a direct hardware read
+int SensorController::getLightLevel() {
+    return analogRead(LIGHT_SENSOR_PIN);
+}
+
+// === SENSOR UPDATE FUNCTIONS (run on core 0) ===
+
+void SensorController::updateTouchSensor() {
+    if (takeMutex(touchMutex, pdMS_TO_TICKS(5))) {
+        previousTouchState = currentTouchState;
+        currentTouchState = touchSensor.touched();
+        giveMutex(touchMutex);
+    }
+}
+
+void SensorController::updateTemperatureSensor() {
+    sensors_event_t humidity, temp;
+    tempSensor.getEvent(&humidity, &temp);
+
+    if (takeMutex(tempMutex, pdMS_TO_TICKS(5))) {
+        // Store values in cache
+        cachedTemperature = temp.temperature;
+        cachedHumidity = humidity.relative_humidity;
+        giveMutex(tempMutex);
+    }
+}
+
+void SensorController::updateIMU() {
+    imu.update();
+
+    AccelData newAccelData;
+    GyroData newGyroData;
+    imu.getAccel(&newAccelData);
+    imu.getGyro(&newGyroData);
+
+    if (takeMutex(imuMutex, pdMS_TO_TICKS(5))) {
+        accelData = newAccelData;
+        gyroData = newGyroData;
+        giveMutex(imuMutex);
+    }
+}
+
+void SensorController::updateTOF() {
+    // Only try to update if sensor was initialized properly
+    if (!tofInitialized) {
+        return;
+    }
+
+    VL53L0X_RangingMeasurementData_t measure;
+    tofSensor.rangingTest(&measure, false);
+
+    if (takeMutex(tofMutex, pdMS_TO_TICKS(5))) {
+        if (measure.RangeStatus != 4) {
+            // Valid measurement
+            lastValidDistance = measure.RangeMilliMeter;
+            consecutiveFailures = 0; // Reset failure counter
+        } else {
+            // Invalid measurement
+            consecutiveFailures++;
+            // Keep lastValidDistance as is, don't overwrite with invalid data
+        }
+        giveMutex(tofMutex);
+    }
+}
+
+// === TOF DEBUGGING FUNCTIONS ===
+
 void SensorController::enableTOFDebugging(bool enable) {
     tofDebugEnabled = enable;
     if (enable) {
@@ -260,30 +428,32 @@ void SensorController::enableTOFDebugging(bool enable) {
     }
 }
 
-// NEW METHOD: Print detailed TOF status and readings
 void SensorController::printTOFStatus() {
     if (!tofInitialized) {
         Serial.println("TOF: SENSOR NOT INITIALIZED");
         return;
     }
 
-    // Get a fresh reading
-    int distance = getDistance();
+    // Get thread-safe copies of the data
+    int distance = -1;
+    int failures = 0;
+
+    if (takeMutex(tofMutex, pdMS_TO_TICKS(10))) {
+        distance = lastValidDistance;
+        failures = consecutiveFailures;
+        giveMutex(tofMutex);
+    }
+
     int brightness = getBrightnessFromDistance();
 
     Serial.print("TOF: ");
 
     if (distance == -1) {
         Serial.print("OUT OF RANGE");
-        if (consecutiveFailures > 1) {
+        if (failures > 1) {
             Serial.print(" (");
-            Serial.print(consecutiveFailures);
+            Serial.print(failures);
             Serial.print(" consecutive failures)");
-        }
-        if (lastValidDistance != -1) {
-            Serial.print(" [Last valid: ");
-            Serial.print(lastValidDistance);
-            Serial.print("mm]");
         }
     } else {
         Serial.print(distance);
@@ -313,4 +483,14 @@ void SensorController::printTOFStatus() {
     }
 
     Serial.println();
+}
+
+// === MUTEX HELPER FUNCTIONS ===
+
+bool SensorController::takeMutex(SemaphoreHandle_t mutex, TickType_t timeout) const {
+    return xSemaphoreTake(mutex, timeout) == pdTRUE;
+}
+
+void SensorController::giveMutex(SemaphoreHandle_t mutex) const {
+    xSemaphoreGive(mutex);
 }
