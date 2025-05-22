@@ -445,11 +445,21 @@ void SmartLantern::processTouchInputs() {
     // Check for mode button (only works when powered on)
     if (sensors.isNewTouch(MODE_BUTTON_CHANNEL) && isPowerOn) {
         nextMode();
+
+        // Show visual feedback for mode selection
+        // We have 4 modes (1-4, skipping MODE_OFF which is 0)
+        int displayMode = currentMode - 1; // Convert to 0-based index (MODE_AMBIENT=1 becomes 0, etc.)
+        buttonFeedback.showModeSelection(displayMode, 4); // 4 total modes to display
     }
 
     // Check for effect button (only works when powered on)
     if (sensors.isNewTouch(EFFECT_BUTTON_CHANNEL) && isPowerOn) {
         nextEffect();
+
+        // Show visual feedback for effect selection
+        // Get the number of effects available for the current mode
+        int numEffects = effects[currentMode].size();
+        buttonFeedback.showEffectSelection(currentEffect, numEffects);
     }
 }
 

@@ -45,6 +45,22 @@ public:
     void showLightState(int state, unsigned long showTime = 2000);
 
     /**
+     * Show mode selection feedback
+     * @param currentMode Current mode index (0-based)
+     * @param totalModes Total number of available modes
+     * @param showTime How long to show the feedback in milliseconds (default 2000ms)
+     */
+    void showModeSelection(int currentMode, int totalModes, unsigned long showTime = 2000);
+
+    /**
+     * Show effect selection feedback
+     * @param currentEffect Current effect index (0-based)
+     * @param totalEffects Total number of available effects for current mode
+     * @param showTime How long to show the feedback in milliseconds (default 2000ms)
+     */
+    void showEffectSelection(int currentEffect, int totalEffects, unsigned long showTime = 2000);
+
+    /**
      * Update the LED handler - call this every frame
      * This handles timing for when to clear feedback displays
      */
@@ -64,7 +80,7 @@ public:
 private:
     LEDController& leds;                // Reference to LED controller
 
-    // Button face LED range on ring strip
+    // Button face LED range on ring strip (our "display" area)
     static const int BUTTON_FACE_START = 38;    // First LED of button face
     static const int BUTTON_FACE_END = 55;      // Last LED of button face
     static const int BUTTON_FACE_COUNT = 18;    // Total LEDs in button face (55-38+1)
@@ -95,10 +111,33 @@ private:
     uint8_t calculateBellCurveBrightness(int position);
 
     /**
-     * Apply feedback display to ring LEDs
+     * Apply feedback display to ring LEDs using solid color
      * @param color Base color for the feedback
      */
     void applyFeedbackToRing(uint32_t color);
+
+    /**
+     * Apply selection display to ring LEDs using dynamic layout
+     * @param selectedIndex Currently selected item (0-based)
+     * @param totalItems Total number of items available
+     */
+    void applySelectionToRing(int selectedIndex, int totalItems);
+
+    /**
+     * Get color for a specific item index using full hue spectrum
+     * @param itemIndex Index of the item (0-based)
+     * @param totalItems Total number of items
+     * @return Color as CRGB value
+     */
+    CRGB getItemColor(int itemIndex, int totalItems);
+
+    /**
+     * Calculate mini bell curve brightness for a small group of LEDs
+     * @param position Position within the mini group
+     * @param groupSize Size of the mini group
+     * @return Brightness value (0-255)
+     */
+    uint8_t calculateMiniBellCurveBrightness(int position, int groupSize);
 };
 
 #endif // MPR121_LED_HANDLER_H

@@ -54,6 +54,44 @@ void MPR121LEDHandler::showLightState(int state, unsigned long showTime) {
     Serial.println(stateNames[constrain(state, 0, 3)]);
 }
 
+void MPR121LEDHandler::showModeSelection(int currentMode, int totalModes, unsigned long showTime) {
+    // Set up feedback timing
+    feedbackStartTime = millis();
+    feedbackDuration = showTime;
+    feedbackActive = true;
+
+    // Apply the selection display for modes
+    applySelectionToRing(currentMode, totalModes);
+
+    // Show the changes immediately
+    leds.showAll();
+
+    // Debug output
+    Serial.print("Mode selection feedback: ");
+    Serial.print(currentMode + 1); // Display as 1-based for user friendliness
+    Serial.print(" of ");
+    Serial.println(totalModes);
+}
+
+void MPR121LEDHandler::showEffectSelection(int currentEffect, int totalEffects, unsigned long showTime) {
+    // Set up feedback timing
+    feedbackStartTime = millis();
+    feedbackDuration = showTime;
+    feedbackActive = true;
+
+    // Apply the selection display for effects
+    applySelectionToRing(currentEffect, totalEffects);
+
+    // Show the changes immediately
+    leds.showAll();
+
+    // Debug output
+    Serial.print("Effect selection feedback: ");
+    Serial.print(currentEffect + 1); // Display as 1-based for user friendliness
+    Serial.print(" of ");
+    Serial.println(totalEffects);
+}
+
 void MPR121LEDHandler::update() {
     // Check if feedback should be cleared due to timeout
     if (feedbackActive) {
@@ -152,4 +190,89 @@ void MPR121LEDHandler::applyFeedbackToRing(uint32_t color) {
         // Set the LED
         leds.getRing()[ringIndex] = ledColor;
     }
+}
+
+void MPR121LEDHandler::applySelectionToRing(int selectedIndex, int totalItems) {
+    // First, clear the entire ring to ensure clean display
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        leds.getRing()[i] = CRGB::Black;
+    }
+
+    // Calculate how many LEDs each item should occupy
+    // We divide the display area equally among all items
+    float ledsPerItem = (float)BUTTON_FACE_COUNT / totalItems;
+
+    // Calculate the center position for the selected item
+    float selectedCenter = (selectedIndex + 0.5f) * ledsPerItem;
+
+    // Determine how many LEDs to light up for this item
+    // We want only a fraction of the space allocated to each item
+    int ledsToLight = max(1, (int)(ledsPerItem / totalItems)); // At least 1 LED, but scale down for many items
+
+    // For better visual effect, cap the maximum at 3 LEDs per item
+    ledsToLight = min(ledsToLight, 3);
+
+    // Get the color for this selected item
+    CRGB itemColor = getItemColor(selectedIndex, totalItems);
+
+    // Light up the LEDs around the center position with mini bell curve
+    for (int i = 0; i < ledsToLight; i++) {
+        // Calculate the LED position relative to center
+        int ledOffset = i - (ledsToLight - 1) / 2; // Centers the LEDs around selectedCenter
+        int ledPosition = (int)(selectedCenter + ledOffset);
+
+        // Make sure we stay within the display area
+        if (ledPosition >= 0 && ledPosition < BUTTON_FACE_COUNT) {
+            int ringIndex = BUTTON_FACE_START + ledPosition;
+
+            // Calculate brightness using mini bell curve
+            uint8_t brightness = calculateMiniBellCurveBrightness(i, ledsToLight);
+
+            // Apply brightness to the color
+            CRGB ledColor = itemColor;
+            ledColor.nscale8_video(brightness);
+
+            // Set the LED
+            leds.getRing()[ringIndex] = ledColor;
+        }
+    }
+}
+
+CRGB MPR121LEDHandler::getItemColor(int itemIndex, int totalItems) {
+    // Calculate hue based on position in the spectrum
+    // We spread the items evenly across the full hue range (0-255 in FastLED)
+    uint8_t hue = (itemIndex * 255) / totalItems;
+
+    // Return color with full saturation and brightness
+    // The brightness will be adjusted later by the mini bell curve
+    return CHSV(hue, 255, 255);
+}
+
+uint8_t MPR121LEDHandler::calculateMiniBellCurveBrightness(int position, int groupSize) {
+    // For very small groups, just return full brightness
+    if (groupSize <= 1) {
+        return 255;
+    }
+
+    // Calculate bell curve for this mini group
+    // Center of the mini bell curve
+    float center = (groupSize - 1) / 2.0f;
+
+    // Smaller standard deviation for tighter bell curve
+    float standardDeviation = groupSize / 3.0f;
+
+    // Distance from center
+    float distance = position - center;
+
+    // Calculate Gaussian function
+    float exponent = -(distance * distance) / (2 * standardDeviation * standardDeviation);
+    float gaussianValue = exp(exponent);
+
+    // Convert to brightness with higher minimum for visibility
+    uint8_t minBrightness = 100;  // Minimum 40% brightness at edges
+    uint8_t maxBrightness = 255;  // Full brightness at center
+
+    uint8_t brightness = minBrightness + (gaussianValue * (maxBrightness - minBrightness));
+
+    return brightness;
 }
