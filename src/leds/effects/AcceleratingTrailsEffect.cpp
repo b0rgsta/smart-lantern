@@ -83,11 +83,16 @@ void AcceleratingTrailsEffect::ensureMinimumTrails() {
 }
 
 void AcceleratingTrailsEffect::update() {
+    // Target 120 FPS for ultra-smooth accelerating trails
+    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
+        return;
+    }
+
     // Clear all LEDs
     leds.clearAll();
 
-    // Randomly create new trails (~15% chance each update)
-    if (random(100) < 15 && trails.size() < maxTrails) {
+    // Randomly create new trails (reduced chance due to higher frame rate)
+    if (random(200) < 3 && trails.size() < maxTrails) {  // ~1.5% chance per frame
         createNewTrail();
     }
 
@@ -100,9 +105,9 @@ void AcceleratingTrailsEffect::update() {
                           INNER_LEDS_PER_STRIP :
                           OUTER_LEDS_PER_STRIP;
 
-        // Update position with acceleration
-        trail.velocity += trail.acceleration;
-        trail.position += trail.velocity;
+        // Update position with acceleration (smaller steps for 120 FPS)
+        trail.velocity += trail.acceleration * 0.3f;  // Reduce acceleration for smoother movement
+        trail.position += trail.velocity * 0.3f;      // Reduce movement for smoother movement
 
         // Deactivate if the entire trail is off the top
         if (trail.position - trail.length >= stripLength) {

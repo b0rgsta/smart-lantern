@@ -80,11 +80,10 @@ void MatrixEffect::updateColorPalette() {
 }
 
 void MatrixEffect::update() {
-    unsigned long currentTime = millis();
-
-    // Only update every 30ms for animation speed control
-    if (currentTime - lastUpdate < 30) return;
-    lastUpdate = currentTime;
+    // Target 120 FPS for ultra-smooth matrix drops
+    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
+        return;
+    }
 
     // Clear all strips before drawing
     leds.clearAll();
@@ -102,11 +101,13 @@ void MatrixEffect::update() {
 
     updateStrip(3); // Ring
 
-    // Update hue every 75ms for color cycling
-    if (currentTime - lastHueUpdate >= 75) {
+    // Update hue for color cycling (slower due to higher frame rate)
+    static int hueUpdateCounter = 0;
+    hueUpdateCounter++;
+    if (hueUpdateCounter >= 10) {  // Update hue every 10 frames instead of every frame
         baseHue += HUE_ROTATION_SPEED;
         updateColorPalette();
-        lastHueUpdate = currentTime;
+        hueUpdateCounter = 0;
     }
 
     // Show all updates

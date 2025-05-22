@@ -35,6 +35,11 @@ void PartyRippleEffect::reset() {
 }
 
 void PartyRippleEffect::update() {
+    // Target 120 FPS for ultra-smooth party effects
+    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
+        return;
+    }
+
     // Clear all LEDs
     leds.clearAll();
 
@@ -43,15 +48,15 @@ void PartyRippleEffect::update() {
     updateInnerTrails();
     updateRipples();
 
-    // Check if it's time to create a new ripple
+    // Check if it's time to create a new ripple (same 2 second interval)
     unsigned long currentTime = millis();
     if (currentTime - lastRippleTime >= rippleInterval) {
         createRipple();
         lastRippleTime = currentTime;
     }
 
-    // Random chance to create new trails (10% chance per frame)
-    if (random(10) == 0) {
+    // Random chance to create new trails (reduced for higher frame rate)
+    if (random(120) == 0) {  // ~0.8% chance per frame instead of 10%
         if (outerTrails.size() < MAX_OUTER_TRAILS) {
             createOuterTrail();
         }

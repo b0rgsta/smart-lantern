@@ -108,10 +108,9 @@ void FireEffect::reset() {
 }
 
 void FireEffect::update() {
-    // Control animation speed - reduce from 60ms to 40ms for faster movement
-    unsigned long currentTime = millis();
-    if (currentTime - lastUpdateTime < 40) {  // Changed from 60ms to 40ms
-        return; // Skip this frame to control the animation speed
+    // Target 120 FPS for ultra-smooth fire animation
+    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
+        return;
     }
 
     // Update the fire simulation
@@ -122,9 +121,6 @@ void FireEffect::update() {
 
     // Show the changes
     leds.showAll();
-
-    // Update timing
-    lastUpdateTime = currentTime;
 }
 
 void FireEffect::updateFireBase() {
