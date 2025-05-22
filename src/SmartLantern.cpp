@@ -173,11 +173,14 @@ void SmartLantern::begin() {
         Serial.println("WARNING: Some sensors failed to initialize");
     }
 
+    // Enable TOF debugging for calibration
+    // sensors.enableTOFDebugging(true);
+
     // Initialize preferences for persistent storage
     preferences.begin("lantern", false); // "lantern" is the namespace
 
     // Load saved settings with sensible defaults
-    LanternMode savedMode = (LanternMode) preferences.getUChar("mode", MODE_AMBIENT);
+    auto savedMode = static_cast<LanternMode>(preferences.getUChar("mode", MODE_AMBIENT));
     int savedEffect = preferences.getUChar("effect", 0);
     tempButtonState = preferences.getUChar("tempBtn", 0);
     lightButtonState = preferences.getUChar("lightBtn", 0);
@@ -218,6 +221,11 @@ void SmartLantern::begin() {
 void SmartLantern::update() {
     // Update sensors
     sensors.update();
+
+    // Update brightness based on TOF sensor (only when powered on)
+    if (isPowerOn) {
+        updateBrightnessFromTOF();
+    }
 
     // Process user inputs
     processTouchInputs();
@@ -282,7 +290,7 @@ void SmartLantern::setPower(bool on) {
             isWindingDown = false;  // Make sure wind-down is off
 
             // Load saved settings with sensible defaults
-            LanternMode savedMode = (LanternMode) preferences.getUChar("mode", MODE_AMBIENT);
+            auto savedMode = static_cast<LanternMode>(preferences.getUChar("mode", MODE_AMBIENT));
             int savedEffect = preferences.getUChar("effect", 0);
             tempButtonState = preferences.getUChar("tempBtn", 0);
             lightButtonState = preferences.getUChar("lightBtn", 0);
@@ -441,21 +449,17 @@ void SmartLantern::handleAutoLighting() {
 
     int lightLevel = sensors.getLightLevel();
     int currentThreshold = 0;
-    String sensitivityName = "OFF";
 
     // Get current threshold
     switch (lightButtonState) {
         case 1: // Low sensitivity
             currentThreshold = LIGHT_THRESHOLD_LOW;
-            sensitivityName = "LOW";
             break;
         case 2: // Medium sensitivity
             currentThreshold = LIGHT_THRESHOLD_MEDIUM;
-            sensitivityName = "MEDIUM";
             break;
         case 3: // High sensitivity
             currentThreshold = LIGHT_THRESHOLD_HIGH;
-            sensitivityName = "HIGH";
             break;
     }
 
@@ -577,4 +581,39 @@ void SmartLantern::updateWindDown() {
         Serial.print(" / ");
         Serial.println(maxPosition);
     }
+}
+
+void SmartLantern::updateBrightnessFromTOF() {
+    // Only apply TOF brightness control when lantern is powered on
+    if (!isPowerOn) {
+        return;
+    }
+
+    // Get brightness from distance sensor
+    int tofBrightness = sensors.getBrightnessFromDistance();
+
+    // Only update if we have a valid reading (hand detected in range)
+    if (tofBrightness != -1) {
+        // Convert 0-100 percentage to 0-255 range for FastLED
+        // But keep minimum brightness at ~10% so LEDs don't completely disappear
+        int ledBrightness;
+
+        if (tofBrightness == 0) {
+            // 0-10cm range: Turn LEDs off completely
+            ledBrightness = 0;
+        } else {
+            // 10-80cm range: Map to 25-255 (10%-100%) to keep LEDs visible
+            ledBrightness = map(tofBrightness, 1, 100, 25, 255);
+        }
+
+        // Apply the brightness to LED controller
+        leds.setBrightness(ledBrightness);
+
+        // Optional: Uncomment for debugging brightness changes
+        // Serial.print("TOF Brightness: ");
+        // Serial.print(tofBrightness);
+        // Serial.print("% -> LED: ");
+        // Serial.println(ledBrightness);
+    }
+    // If tofBrightness == -1 (no hand detected), keep current brightness unchanged
 }

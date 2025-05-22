@@ -76,6 +76,7 @@ private:
   unsigned long autoOnTime;
 
   // Private helper functions
+  void updateBrightnessFromTOF();  // Updates LED brightness based on TOF sensor
   void processTouchInputs();
   void handleAutoLighting();
   void updateEffects();

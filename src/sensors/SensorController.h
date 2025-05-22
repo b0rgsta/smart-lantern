@@ -36,6 +36,15 @@ public:
     // Time of flight sensor methods
     int getDistance();
 
+    // TOF brightness control methods - NEW
+    int getBrightnessFromDistance();  // Returns brightness 0-100 based on distance
+    bool isHandDetected();           // Returns true if hand is in valid range
+
+    // TOF debugging methods - NEW
+    void enableTOFDebugging(bool enable = true);
+    void printTOFStatus();
+    bool isTOFWorking() const { return tofInitialized; }
+
 private:
     Adafruit_MPR121 touchSensor;
     Adafruit_AHTX0 tempSensor;
@@ -55,6 +64,14 @@ private:
 
     // Debug timing
     unsigned long lastLightDebugTime; // New variable for debug timing
+
+    // TOF debugging variables - NEW
+    bool tofDebugEnabled;
+    bool tofInitialized;
+    unsigned long lastTOFDebugTime;
+    const unsigned long tofDebugInterval = 1000; // Print TOF debug every 1 second
+    int lastValidDistance;
+    int consecutiveFailures;
 
     // Private helper functions
     void updateTouchSensor();
