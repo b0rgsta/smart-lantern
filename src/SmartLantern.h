@@ -11,6 +11,7 @@
 #include "leds/effects/Effect.h"
 #include "leds/effects/StartupEffect.h"  // Add this back for the startup animation
 #include "leds/effects/FireEffect.h"
+#include "leds/effects/PartyRippleEffect.h"
 #include "leds/effects/RainbowEffect.h"
 #include "leds/effects/TrailsEffect.h"
 #include "leds/effects/MatrixEffect.h"
