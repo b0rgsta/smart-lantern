@@ -46,6 +46,7 @@ void loop() {
 
         // Reset counters
         frameCount = 0;
+
         lastFpsTime = currentTime;
     }
 }
