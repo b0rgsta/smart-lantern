@@ -12,6 +12,10 @@ WaterfallEffect::WaterfallEffect(LEDController& ledController) : Effect(ledContr
         drop.isActive = false;
         drop.hasSplashed = false;
         drop.splashFrame = 0;
+        drop.trailLength = 0;  // Reset trail length too
+        drop.currentFrame = 0; // Reset fade-in frame counter
+        drop.fadeInFrames = 0; // Reset fade-in duration
+        drop.maxBrightness = 0; // Reset max brightness
         waterDrops.push_back(drop);
     }
 
@@ -40,15 +44,15 @@ void WaterfallEffect::update() {
         return;
     }
 
-    // Clear all LED strips before drawing new frame
-    leds.clearAll();
+    // Set background water color on all LEDs first (constant waterfall base)
+    fillBackgroundWater();
 
     // Randomly create new water drops
     if (random(100) < DROP_CREATE_CHANCE) {
         createNewDrop();
     }
 
-    // Update and draw all active drops
+    // Update and draw all active drops (these are the bright moving drops)
     for (auto& drop : waterDrops) {
         if (drop.isActive) {
             // Update the drop's physics (position, speed, etc.)
@@ -67,6 +71,24 @@ void WaterfallEffect::update() {
     leds.showAll();
 }
 
+void WaterfallEffect::fillBackgroundWater() {
+    // Create a subtle blue-white background water color (more muted than before)
+    // This makes all LEDs look like flowing water at low brightness
+    CRGB backgroundWater = getWaterColor(160, 30);  // Even dimmer and more subtle
+
+    // Fill all inner strips with background water
+    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
+        leds.getInner()[i] = backgroundWater;
+    }
+
+    // Fill all outer strips with background water
+    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+        leds.getOuter()[i] = backgroundWater;
+    }
+
+    // Core and ring strips stay off to focus on the waterfall
+}
+
 void WaterfallEffect::createNewDrop() {
     // Find an inactive drop slot to use
     for (auto& drop : waterDrops) {
@@ -79,21 +101,43 @@ void WaterfallEffect::createNewDrop() {
             // Choose which segment of that strip type (0, 1, or 2)
             drop.subStrip = random(3);
 
-            // Start at the very top of the strip
-            drop.position = getStripLength(drop.stripType) - 1;
+            // Start the drop ABOVE the strip so the trail can enter gradually
+            // Position it so only the head starts at the top edge
+            drop.position = getStripLength(drop.stripType) - 1 + drop.trailLength;
 
-            // Random starting speed (drops don't all fall at same rate)
-            drop.speed = MIN_START_SPEED +
+            // Eliminate small trails - start with medium-sized drops minimum
+            int dropType = random(100);
+            if (dropType < 50) {
+                // 50% chance: Medium drops (12-28 pixels) - no more small dots
+                drop.trailLength = 12 + random(17);
+            } else if (dropType < 80) {
+                // 30% chance: Large streams (30-55 pixels)
+                drop.trailLength = 30 + random(26);
+            } else {
+                // 20% chance: Massive waterfalls (60-90 pixels!)
+                drop.trailLength = 60 + random(31);
+            }
+
+            // Bigger drops (longer trails) fall faster for realism
+            float sizeSpeedBonus = (drop.trailLength - 12) * 0.002f;  // Adjusted for new minimum size
+            drop.speed = MIN_START_SPEED + sizeSpeedBonus +
                         (random(100) / 100.0f) * (MAX_START_SPEED - MIN_START_SPEED);
 
-            // All drops experience the same gravity
+            // All drops experience the same gravity (reduced)
             drop.acceleration = GRAVITY;
 
-            // Water drops are blue-ish with some variation
+            // Water drops are blue-ish with some variation but more subtle
             drop.hue = 140 + random(40);  // Blue range (140-180 in FastLED hue)
 
-            // Random brightness for variety (but not too dim)
-            drop.brightness = 150 + random(105);  // 150-255 range
+            // Set maximum brightness for realistic water (not too bright/vibrant)
+            drop.maxBrightness = 160 + random(70);  // 160-230 range (more subtle than before)
+
+            // Start with zero brightness - will fade in gradually
+            drop.brightness = 0;
+
+            // Random fade-in duration (longer fade for larger drops, but cap it reasonably)
+            drop.fadeInFrames = 8 + min(8, drop.trailLength / 3);  // 8-16 frames, capped to prevent very long fades
+            drop.currentFrame = 0;  // Start at frame 0
 
             // Mark as active and not splashed yet
             drop.isActive = true;
@@ -120,6 +164,23 @@ void WaterfallEffect::updateDrop(WaterDrop& drop) {
         return;
     }
 
+    // Update fade-in effect for new drops
+    if (drop.currentFrame < drop.fadeInFrames) {
+        drop.currentFrame++;
+
+        // Calculate fade-in progress (0.0 to 1.0)
+        float fadeProgress = (float)drop.currentFrame / drop.fadeInFrames;
+
+        // Apply smooth easing curve to fade-in (starts slow, speeds up, then slows down)
+        fadeProgress = fadeProgress * fadeProgress * (3.0f - 2.0f * fadeProgress);  // Smoothstep function
+
+        // Set current brightness based on fade-in progress
+        drop.brightness = drop.maxBrightness * fadeProgress;
+    } else {
+        // Drop is fully faded in, use maximum brightness
+        drop.brightness = drop.maxBrightness;
+    }
+
     // Update drop physics (gravity makes it go faster)
     drop.speed += drop.acceleration;
 
@@ -132,11 +193,12 @@ void WaterfallEffect::updateDrop(WaterDrop& drop) {
     drop.position -= drop.speed;
 
     // Check if drop has hit the bottom of the strip
-    if (drop.position <= 0) {
-        // Drop has hit bottom - start splash effect
+    // But don't remove it immediately - let the trail finish extending past the bottom
+    if (drop.position <= -drop.trailLength) {
+        // Drop and its entire trail have moved past the bottom - start splash effect
         drop.hasSplashed = true;
         drop.splashFrame = 0;
-        drop.position = 0;  // Keep at bottom for splash
+        drop.position = 0;  // Reset to bottom for splash
     }
 }
 
@@ -144,100 +206,104 @@ void WaterfallEffect::drawDrop(const WaterDrop& drop) {
     // Get the strip length to ensure we're drawing within bounds
     int stripLength = getStripLength(drop.stripType);
 
-    // Calculate which LED this drop should light up
-    int ledPosition = (int)drop.position;
+    // Draw the drop with its fading trail
+    for (int i = 0; i < drop.trailLength; i++) {
+        // Calculate position for this part of the trail
+        // For downward falling drops: i=0 should be the leading edge (bottom/front)
+        // i=trailLength-1 should be the tail (top/back)
+        float trailPosition = drop.position + i;  // Trail extends upward from the leading edge
+        int ledPosition = (int)trailPosition;
 
-    // Make sure position is valid
-    if (ledPosition < 0 || ledPosition >= stripLength) {
-        return;
-    }
-
-    // Map the logical position to physical LED position
-    int physicalPos = leds.mapPositionToPhysical(drop.stripType, ledPosition, drop.subStrip);
-
-    // Adjust for the segment offset (each segment has multiple strips)
-    if (drop.stripType == 1) {  // Inner strips
-        physicalPos += drop.subStrip * INNER_LEDS_PER_STRIP;
-    } else if (drop.stripType == 2) {  // Outer strips
-        physicalPos += drop.subStrip * OUTER_LEDS_PER_STRIP;
-    }
-
-    // Get the water color for this drop
-    CRGB waterColor = getWaterColor(drop.hue, drop.brightness);
-
-    // Set the LED color based on strip type
-    if (drop.stripType == 1) {  // Inner
-        if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
-            leds.getInner()[physicalPos] = waterColor;
-        }
-    } else if (drop.stripType == 2) {  // Outer
-        if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
-            leds.getOuter()[physicalPos] = waterColor;
-        }
-    }
-}
-
-void WaterfallEffect::drawSplash(const WaterDrop& drop) {
-    // Create a splash effect that expands from the impact point
-
-    // Calculate splash size based on animation frame
-    int splashSize = drop.splashFrame + 1;  // Grows each frame
-
-    // Calculate splash brightness (fades as it grows)
-    float fadeRatio = 1.0f - ((float)drop.splashFrame / SPLASH_FRAMES);
-    uint8_t splashBrightness = drop.brightness * fadeRatio;
-
-    // Get base water color
-    CRGB splashColor = getWaterColor(drop.hue, splashBrightness);
-
-    // Draw splash pixels extending from impact point
-    for (int i = 0; i < splashSize; i++) {
-        int ledPosition = i;  // Start from bottom (position 0) and go up
-
-        // Make sure we don't go beyond strip length
-        if (ledPosition >= getStripLength(drop.stripType)) {
-            break;
+        // Make sure position is valid
+        if (ledPosition < 0 || ledPosition >= stripLength) {
+            continue; // Skip this trail pixel if it's out of bounds
         }
 
-        // Calculate brightness for this splash pixel (dimmer at edges)
-        float pixelFade = 1.0f - ((float)i / splashSize);
-        CRGB pixelColor = splashColor;
-        pixelColor.nscale8_video(255 * pixelFade);
-
-        // Map to physical position
+        // Map the logical position to physical LED position
         int physicalPos = leds.mapPositionToPhysical(drop.stripType, ledPosition, drop.subStrip);
 
-        // Adjust for segment offset
+        // Adjust for the segment offset (each segment has multiple strips)
         if (drop.stripType == 1) {  // Inner strips
             physicalPos += drop.subStrip * INNER_LEDS_PER_STRIP;
         } else if (drop.stripType == 2) {  // Outer strips
             physicalPos += drop.subStrip * OUTER_LEDS_PER_STRIP;
         }
 
-        // Set the LED color based on strip type
+        // Calculate brightness fade for this trail position
+        // Head of drop is brightest (i=0), tail fades out (i=trailLength-1)
+        float fadeRatio = 1.0f - ((float)i / drop.trailLength);
+
+        // Apply a curve to the fade for more natural look
+        fadeRatio = fadeRatio * fadeRatio;  // Square the ratio for exponential fade
+
+        // Calculate final brightness for this trail pixel
+        uint8_t trailBrightness = drop.brightness * fadeRatio;
+
+        // Get the water color for this trail position
+        CRGB waterColor = getWaterColor(drop.hue, trailBrightness);
+
+        // Set the LED color based on strip type (add to background, don't replace)
         if (drop.stripType == 1) {  // Inner
             if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
-                // Add to existing color (in case multiple splashes overlap)
-                leds.getInner()[physicalPos] += pixelColor;
+                // Add the trail color to the existing background water
+                leds.getInner()[physicalPos] += waterColor;
             }
         } else if (drop.stripType == 2) {  // Outer
             if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
-                // Add to existing color (in case multiple splashes overlap)
-                leds.getOuter()[physicalPos] += pixelColor;
+                // Add the trail color to the existing background water
+                leds.getOuter()[physicalPos] += waterColor;
             }
         }
     }
 }
 
+void WaterfallEffect::drawSplash(const WaterDrop& drop) {
+    // Create a subtle splash effect that spreads outward at the bottom
+    // instead of going upward (which looks like reverse flow)
+
+    // Calculate splash intensity based on animation frame (fades quickly)
+    float fadeRatio = 1.0f - ((float)drop.splashFrame / SPLASH_FRAMES);
+    uint8_t splashBrightness = drop.brightness * fadeRatio * 0.6f;  // Make splash dimmer
+
+    // Only draw splash at the very bottom (position 0) to avoid upward trails
+    int ledPosition = 0;  // Always at bottom
+
+    // Map to physical position
+    int physicalPos = leds.mapPositionToPhysical(drop.stripType, ledPosition, drop.subStrip);
+
+    // Adjust for segment offset
+    if (drop.stripType == 1) {  // Inner strips
+        physicalPos += drop.subStrip * INNER_LEDS_PER_STRIP;
+    } else if (drop.stripType == 2) {  // Outer strips
+        physicalPos += drop.subStrip * OUTER_LEDS_PER_STRIP;
+    }
+
+    // Get splash color (make it more white/foamy)
+    CRGB splashColor = getWaterColor(drop.hue, splashBrightness);
+
+    // Set the LED color based on strip type (just the bottom pixel)
+    if (drop.stripType == 1) {  // Inner
+        if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
+            // Add splash to the bottom pixel only
+            leds.getInner()[physicalPos] += splashColor;
+        }
+    } else if (drop.stripType == 2) {  // Outer
+        if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
+            // Add splash to the bottom pixel only
+            leds.getOuter()[physicalPos] += splashColor;
+        }
+    }
+}
+
 CRGB WaterfallEffect::getWaterColor(uint8_t hue, uint8_t brightness) {
-    // Create water-like colors (blues and blue-whites)
+    // Create more subtle water-like colors (blues and blue-whites)
 
-    // Use the provided hue but adjust saturation for water effect
-    uint8_t saturation = 200;  // High saturation for vivid blue water
+    // Use reduced saturation for more subtle, realistic water colors
+    uint8_t saturation = 120;  // Much lower saturation for subtle colors
 
-    // For brighter drops, reduce saturation to make them more white (like foam)
-    if (brightness > 200) {
-        saturation = 150;  // Less saturated = more white
+    // For brighter drops, reduce saturation even more to make them more white (like foam)
+    if (brightness > 180) {
+        saturation = 80;  // Very low saturation = more white/subtle
     }
 
     // Create the color using FastLED's HSV system

@@ -15,7 +15,11 @@ struct WaterDrop {
     float speed;           // How fast the drop is falling (pixels per frame)
     float acceleration;    // How much speed increases each frame (gravity effect)
     uint8_t brightness;    // Current brightness of the drop (0-255)
+    uint8_t maxBrightness; // Maximum brightness this drop will reach when fully formed
     uint8_t hue;          // Color hue of the drop (0-255 for FastLED)
+    uint8_t trailLength;  // How long the fading trail behind this drop is (12-90 pixels, no small dots)
+    uint8_t fadeInFrames; // How many frames it takes for this drop to fade in
+    uint8_t currentFrame; // Current frame since drop was created (for fade-in)
     bool isActive;        // Whether this drop is currently falling
     bool hasSplashed;     // Whether this drop has hit the bottom and splashed
     int splashFrame;      // Which frame of the splash animation we're on
@@ -32,6 +36,7 @@ struct WaterDrop {
  * - Blue-white water colors with varying transparency
  * - Splash effects when drops hit the bottom
  * - Multiple drops can be active simultaneously
+ * - Background water on all LEDs for constant waterfall appearance
  * - Core strip stays off to focus attention on falling water
  */
 class WaterfallEffect : public Effect {
@@ -70,15 +75,21 @@ private:
     std::vector<WaterDrop> waterDrops;
 
     // Effect parameters - these control how the waterfall looks and behaves
-    static const int MAX_DROPS = 15;           // Maximum number of drops at once
-    static const int DROP_CREATE_CHANCE = 8;   // Chance per frame to create new drop (out of 100)
-    static const int SPLASH_FRAMES = 8;        // How many frames a splash lasts
+    static const int MAX_DROPS = 25;           // More drops for denser waterfall
+    static const int DROP_CREATE_CHANCE = 15;  // Higher chance per frame to create new drop (out of 100)
+    static const int SPLASH_FRAMES = 12;       // Longer splash duration
 
-    // Physics parameters for realistic water movement
-    static constexpr float MIN_START_SPEED = 0.1f;    // Slowest initial drop speed
-    static constexpr float MAX_START_SPEED = 0.3f;    // Fastest initial drop speed
-    static constexpr float GRAVITY = 0.02f;           // How much drops accelerate each frame
-    static constexpr float MAX_SPEED = 1.0f;          // Terminal velocity (fastest drops can go)
+    // Physics parameters for realistic water movement (slower speeds)
+    static constexpr float MIN_START_SPEED = 0.02f;   // Slowest initial drop speed (much slower)
+    static constexpr float MAX_START_SPEED = 0.08f;   // Fastest initial drop speed (much slower)
+    static constexpr float GRAVITY = 0.005f;          // How much drops accelerate each frame (less gravity)
+    static constexpr float MAX_SPEED = 0.3f;          // Terminal velocity (much slower max speed)
+
+    /**
+     * Fill all LEDs with a dim background water color
+     * Creates the base waterfall appearance before adding bright drops
+     */
+    void fillBackgroundWater();
 
     /**
      * Create a new water drop at the top of a random strip
