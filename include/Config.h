@@ -29,7 +29,7 @@
 #define OUTER_LEDS_PER_STRIP   24    // 24 LEDs per outer strip section
 
 // Total LED counts (calculated)
-#define LED_STRIP_CORE_COUNT   160    // Number of LEDs in core strip
+#define LED_STRIP_CORE_COUNT   142    // Number of LEDs in core strip
 #define LED_STRIP_INNER_COUNT  (INNER_LEDS_PER_STRIP * NUM_INNER_STRIPS)  // 84 total inner LEDs
 #define LED_STRIP_OUTER_COUNT  (OUTER_LEDS_PER_STRIP * NUM_OUTER_STRIPS)  // 72 total outer LEDs
 #define LED_STRIP_RING_COUNT   62    // Number of LEDs in ring strip
