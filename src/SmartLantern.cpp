@@ -11,6 +11,7 @@
 #include "leds/effects/SolidColorEffect.h"
 #include "leds/effects/GradientEffect.h"
 #include "leds/effects/PartyRippleEffect.h"
+#include "leds/effects/WaterfallEffect.h"
 
 SmartLantern::SmartLantern() : isPowerOn(false),
                                isAutoOn(false),
@@ -55,6 +56,8 @@ void SmartLantern::initializeEffects() {
     auto matrixEffect = new MatrixEffect(leds);
     auto acceleratingTrailsEffect = new AcceleratingTrailsEffect(leds);
     auto partyRippleEffect = new PartyRippleEffect(leds);
+    auto waterfallEffect = new WaterfallEffect(leds);
+
 
     // Store a reference to the fire effect for temperature override
     fireEffectPtr = fireEffect;
@@ -145,10 +148,12 @@ void SmartLantern::initializeEffects() {
 
     // MODE_ANIMATED
     effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
+    effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
     effects[MODE_ANIMATED].push_back(trailsEffect); // Trails effect
     effects[MODE_ANIMATED].push_back(matrixEffect); // Matrix effect
     effects[MODE_ANIMATED].push_back(acceleratingTrailsEffect); // Accelerating trails
     effects[MODE_ANIMATED].push_back(rainbowEffect); // Rainbow effect
+
 
     // MODE_PARTY
     effects[MODE_PARTY].push_back(rainbowEffect); // Rainbow
