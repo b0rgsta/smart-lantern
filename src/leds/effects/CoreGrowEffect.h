@@ -53,7 +53,7 @@ private:
     // Timing constants
     static const int MAX_SIZE = 12;         // Maximum LEDs on each side of center (total 25 = 12+1+12)
     static const int GROW_INTERVAL = 140;   // Milliseconds between each growth step (30% faster: 200 * 0.7 = 140)
-    static const int MOVE_INTERVAL = 70;    // Milliseconds between each movement step (30% faster: 100 * 0.7 = 70)
+    static const int MOVE_INTERVAL = 140;   // Milliseconds between each movement step (same as grow for seamless transition)
 
     /**
      * Calculate brightness based on distance from center

@@ -39,9 +39,12 @@ void CoreGrowEffect::update() {
 
                 // Set initial positions for moving phase (both start at center)
                 int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
-                int segmentCenter = (coreSegmentLength / 2) - 5; // Same offset as first segment (was -8, now -5)
+                int segmentCenter = coreSegmentLength / 2; // Normal center calculation
                 leftPosition = segmentCenter;
                 rightPosition = segmentCenter;
+
+                // Don't update lastUpdateTime here - let the moving phase handle timing
+                // This prevents the flicker by ensuring immediate movement
 
                 Serial.println("Switching to moving phase - patterns will move in both directions");
             } else {
@@ -51,53 +54,20 @@ void CoreGrowEffect::update() {
                 Serial.print(1 + 2 * currentSize);
                 Serial.print(" / 25)");
                 Serial.println();
-            }
 
-            lastUpdateTime = currentTime;
+                lastUpdateTime = currentTime; // Only update timing during normal growth
+            }
         }
 
         if (currentSize <= MAX_SIZE) {
-            // Draw growing pattern on all 3 core segments
+            // Draw growing pattern on all 3 core segments using the same method as moving phase
             int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
 
             for (int segment = 0; segment < 3; segment++) {
-                int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
-                int segmentCenter;
+                int segmentCenter = (segment * coreSegmentLength) + (coreSegmentLength / 2);
 
-                // Calculate center position for each segment
-                if (segment == 0) {
-                    // First segment: move center down by 5 LEDs (was 8, moved up 3)
-                    segmentCenter = (segment * coreSegmentLength) + (coreSegmentLength / 2) - 5;
-                } else {
-                    // Other segments: use normal center calculation
-                    segmentCenter = (segment * coreSegmentLength) + (coreSegmentLength / 2);
-                }
-
-                Serial.print("Segment ");
-                Serial.print(segment);
-                Serial.print(" center at: ");
-                Serial.println(segmentCenter);
-
-                // Center LED at 100% brightness
-                leds.getCore()[segmentCenter] = CRGB(255, 0, 0);
-
-                // LEDs on both sides with brightness fade
-                for (int offset = 1; offset <= currentSize; offset++) {
-                    float brightness = calculateBrightness(offset);
-                    uint8_t redValue = 255 * brightness;
-
-                    // Left side LED
-                    int leftPos = segmentCenter - offset;
-                    if (leftPos >= segment * coreSegmentLength) {
-                        leds.getCore()[leftPos] = CRGB(redValue, 0, 0);
-                    }
-
-                    // Right side LED
-                    int rightPos = segmentCenter + offset;
-                    if (rightPos < (segment + 1) * coreSegmentLength) {
-                        leds.getCore()[rightPos] = CRGB(redValue, 0, 0);
-                    }
-                }
+                // Draw the pattern using the same drawPattern method used in moving phase
+                drawPattern(segment, segmentCenter);
             }
         }
 
@@ -125,25 +95,17 @@ void CoreGrowEffect::update() {
             }
         }
 
-        // Draw both moving patterns on all 3 core segments
+        // Always draw both moving patterns
         for (int segment = 0; segment < 3; segment++) {
             int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
 
             // Calculate segment positions
             int segmentStart = segment * coreSegmentLength;
-            int segmentBaseCenter;
-
-            if (segment == 0) {
-                // First segment: use offset center
-                segmentBaseCenter = segmentStart + (coreSegmentLength / 2) - 5;
-            } else {
-                // Other segments: use normal center
-                segmentBaseCenter = segmentStart + (coreSegmentLength / 2);
-            }
+            int segmentBaseCenter = segmentStart + (coreSegmentLength / 2);
 
             // Calculate positions for this segment's patterns
-            int segmentLeftPos = segmentBaseCenter + (leftPosition - ((coreSegmentLength / 2) - 5));
-            int segmentRightPos = segmentBaseCenter + (rightPosition - ((coreSegmentLength / 2) - 5));
+            int segmentLeftPos = segmentBaseCenter + (leftPosition - coreSegmentLength / 2);
+            int segmentRightPos = segmentBaseCenter + (rightPosition - coreSegmentLength / 2);
 
             // Draw left-moving pattern
             drawPattern(segment, segmentLeftPos);
@@ -169,30 +131,48 @@ void CoreGrowEffect::drawPattern(int segment, int centerPos) {
 
     // Draw center LED
     if (centerPos >= segmentStart && centerPos <= segmentEnd) {
-        leds.getCore()[centerPos] = CRGB(255, 0, 0);
+        // Use max instead of add to prevent brightness increase from overlapping
+        CRGB currentColor = leds.getCore()[centerPos];
+        CRGB newColor = CRGB(255, 0, 0);
+        leds.getCore()[centerPos] = CRGB(
+            max(currentColor.r, newColor.r),
+            max(currentColor.g, newColor.g),
+            max(currentColor.b, newColor.b)
+        );
     }
 
     // Draw LEDs on both sides with brightness fade
-    for (int offset = 1; offset <= MAX_SIZE; offset++) {
+    // Use currentSize during growing phase, MAX_SIZE during moving phase
+    int drawSize = (currentPhase == GROWING) ? currentSize : MAX_SIZE;
+
+    for (int offset = 1; offset <= drawSize; offset++) {
         float brightness = calculateBrightness(offset);
         uint8_t redValue = 255 * brightness;
 
         // Left side LED
         int leftPos = centerPos - offset;
         if (leftPos >= segmentStart && leftPos <= segmentEnd) {
-            // Add to existing color in case patterns overlap
+            // Use max instead of add to prevent brightness increase from overlapping
             CRGB currentColor = leds.getCore()[leftPos];
-            currentColor.r = min(255, currentColor.r + redValue);
-            leds.getCore()[leftPos] = currentColor;
+            CRGB newColor = CRGB(redValue, 0, 0);
+            leds.getCore()[leftPos] = CRGB(
+                max(currentColor.r, newColor.r),
+                max(currentColor.g, newColor.g),
+                max(currentColor.b, newColor.b)
+            );
         }
 
         // Right side LED
         int rightPos = centerPos + offset;
         if (rightPos >= segmentStart && rightPos <= segmentEnd) {
-            // Add to existing color in case patterns overlap
+            // Use max instead of add to prevent brightness increase from overlapping
             CRGB currentColor = leds.getCore()[rightPos];
-            currentColor.r = min(255, currentColor.r + redValue);
-            leds.getCore()[rightPos] = currentColor;
+            CRGB newColor = CRGB(redValue, 0, 0);
+            leds.getCore()[rightPos] = CRGB(
+                max(currentColor.r, newColor.r),
+                max(currentColor.g, newColor.g),
+                max(currentColor.b, newColor.b)
+            );
         }
     }
 }
