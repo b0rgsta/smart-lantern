@@ -49,7 +49,7 @@ uint32_t LEDController::colorHSV(uint16_t hue, uint8_t sat, uint8_t val) {
 }
 
 uint32_t LEDController::color(uint8_t r, uint8_t g, uint8_t b) {
-    return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    return ((uint32_t) r << 16) | ((uint32_t) g << 8) | b;
 }
 
 CRGB LEDController::neoColorToCRGB(uint32_t color) {
@@ -61,7 +61,7 @@ CRGB LEDController::neoColorToCRGB(uint32_t color) {
 }
 
 uint32_t LEDController::CRGBToNeoColor(CRGB color) {
-    return ((uint32_t)color.r << 16) | ((uint32_t)color.g << 8) | color.b;
+    return ((uint32_t) color.r << 16) | ((uint32_t) color.g << 8) | color.b;
 }
 
 int LEDController::mapPositionToPhysical(int stripId, int logicalPos, int subStrip) {
@@ -69,11 +69,14 @@ int LEDController::mapPositionToPhysical(int stripId, int logicalPos, int subStr
 
     switch (stripId) {
         case 0: // Core strip
-            // For core, we need to flip the B-C sections
-            if (logicalPos > LED_STRIP_CORE_COUNT / 3) {  // If in sections B or C
-                // Flip the position for B-C sections
-                physicalPos = LED_STRIP_CORE_COUNT - 1 - logicalPos;
+            // Core strip has 3 segments (A, B, C)
+            // Only flip the middle segment (B, which is segment 1)
+            if (subStrip == 1) {
+                // For segment B (middle), flip the position within that segment
+                int segmentLength = LED_STRIP_CORE_COUNT / 3;
+                physicalPos = segmentLength - 1 - logicalPos;
             }
+            // Segments A (0) and C (2) use direct mapping
             break;
 
         case 1: // Inner strips

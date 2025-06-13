@@ -187,21 +187,21 @@ void TechnoOrangeEffect::updateCoreAnimation() {
             int coreSegmentLength = LED_STRIP_CORE_COUNT / 3; // Core has 3 segments
 
             for (int segment = 0; segment < 3; segment++) {
-                int segmentStart = segment * coreSegmentLength;
-
                 for (int led = 0; led < coreSegmentLength; led++) {
-                    int ledIndex = segmentStart + led;
+                    // Use LED mapping to get the correct physical position
+                    int physicalPos = leds.mapPositionToPhysical(0, led, segment);
+                    physicalPos += segment * coreSegmentLength; // Add segment offset
 
                     // Use the same logic as inner strips - simple position comparison
                     if (led < precisePosition - fadeLength) {
-                        // LEDs below the fade zone: fully lit (purple color at 15% brightness)
+                        // LEDs below the fade zone: fully lit (purple color at 45% brightness)
                         CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
                         CRGB dimmedColor = CRGB(
-                            baseColor.r * 0.45f,  // 15% brightness
-                            baseColor.g * 0.45f,  // 15% brightness
-                            baseColor.b * 0.45f   // 15% brightness
+                            baseColor.r * 0.45f,
+                            baseColor.g * 0.45f,
+                            baseColor.b * 0.45f
                         );
-                        leds.getCore()[ledIndex] = dimmedColor;
+                        leds.getCore()[physicalPos] = dimmedColor;
                     } else if (led <= precisePosition) {
                         // LEDs in the fade zone: gradually fade from full brightness to off
                         float distanceFromEdge = precisePosition - led;
@@ -211,18 +211,18 @@ void TechnoOrangeEffect::updateCoreAnimation() {
                         // Apply smooth curve for natural fade
                         fadeProgress = sqrt(fadeProgress);
 
-                        // Calculate faded purple color at 15% base brightness
+                        // Calculate faded purple color
                         CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
                         CRGB fadedColor = CRGB(
-                            baseColor.r * fadeProgress * 0.95f,  // Apply both fade and 15% brightness
-                            baseColor.g * fadeProgress * 0.95f,  // Apply both fade and 15% brightness
-                            baseColor.b * fadeProgress * 0.95f   // Apply both fade and 15% brightness
+                            baseColor.r * fadeProgress * 0.45f,
+                            baseColor.g * fadeProgress * 0.45f,
+                            baseColor.b * fadeProgress * 0.45f
                         );
 
-                        leds.getCore()[ledIndex] = fadedColor;
+                        leds.getCore()[physicalPos] = fadedColor;
                     } else {
                         // LEDs above the fade zone: completely off (black)
-                        leds.getCore()[ledIndex] = CRGB::Black;
+                        leds.getCore()[physicalPos] = CRGB::Black;
                     }
                 }
             }
