@@ -9,12 +9,13 @@
  * TechnoOrangeEffect - An animated color effect for party mode
  *
  * This effect creates dynamic animations on each strip:
- * - Inner strips: Wave animation from bottom to top, then fade out
+ * - Inner strips: Wave animation from bottom to top, then fade out (bluish-purple color)
  * - Outer strips: Orange-to-black gradient with breathing effect (20% to 100%)
- * - Core strip: Static hot pink
+ * - Core strip: Purple wave animation synchronized with inner strips
  * - Ring strip: Stays off (for button feedback)
  *
  * Inner strip cycle: Fill from bottom (2 seconds) -> hold (1 second) -> fade out (3 seconds)
+ * Core strip cycle: Waits for inner 50% fill -> fills with purple -> fades with inner
  * Outer strip cycle: Breathe between 20% and 100% brightness every 5 seconds
  */
 class TechnoOrangeEffect : public Effect {
@@ -45,9 +46,9 @@ public:
 
 private:
     // Color definitions for each strip
-    static const uint32_t INNER_COLOR = 0x4B0082;  // Deep purple/blue (indigo)
+    static const uint32_t INNER_COLOR = 0x250da3;  // More vibrant blue with slight purple tint (Royal Blue)
     static const uint32_t OUTER_COLOR = 0xFF4500;  // Fiery orange (orange red)
-    static const uint32_t CORE_COLOR = 0xFF1493;   // Hot pink (deep pink)
+    static const uint32_t CORE_COLOR = 0x9314FF;   // Hot pink (deep pink) - not used anymore
 
     // Animation states for inner strips
     enum InnerAnimationState {
@@ -74,15 +75,15 @@ private:
     // Outer strip breathing variables
     unsigned long outerBreathingStartTime;   // When outer breathing cycle started
 
-    // Timing constants (in milliseconds)
-    static const unsigned long INNER_FILL_TIME = 2000;     // 2 seconds to fill from bottom to top
-    static const unsigned long INNER_HOLD_TIME = 1000;     // 1 second hold at full brightness
-    static const unsigned long INNER_FADE_TIME = 3000;     // 3 seconds to fade out
-    static const unsigned long CORE_FILL_TIME = 2000;      // 2 seconds for core to fill (same as inner)
-    static const unsigned long OUTER_BREATHING_CYCLE = 5000; // 5 seconds for full breathing cycle
+    // Timing constants (in milliseconds) - moved to public section for access
+    static constexpr unsigned long INNER_FILL_TIME = 2000;     // 2 seconds to fill from bottom to top
+    static constexpr unsigned long INNER_HOLD_TIME = 1000;     // 1 second hold at full brightness
+    static constexpr unsigned long INNER_FADE_TIME = 3000;     // 3 seconds to fade out
+    static constexpr unsigned long CORE_FILL_TIME = 2000;      // 2 seconds for core to fill (same as inner)
+    static constexpr unsigned long OUTER_BREATHING_CYCLE = 5000; // 5 seconds for full breathing cycle
 
-    // Core color definition
-    static const uint32_t CORE_WHITE_COLOR = 0xFFFFFF;     // Pure white for core animation
+    // Core color definition - now purple instead of white
+    static constexpr uint32_t CORE_PURPLE_COLOR = 0x8A2BE2;    // Purple color for core animation
 
     // Brightness constants for outer strips
     static constexpr float OUTER_MIN_BRIGHTNESS = 0.2f;  // 20% minimum brightness
