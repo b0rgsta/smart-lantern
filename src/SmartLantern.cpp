@@ -14,6 +14,7 @@
 #include "leds/effects/PartyFireEffect.h"
 #include "leds/effects/TemperatureColorEffect.h"
 #include "leds/effects/PartyRippleEffect.h"
+#include "leds/effects/FutureEffect.h"
 
 
 
@@ -74,6 +75,7 @@ void SmartLantern::initializeEffects() {
     auto rainbowTranceEffect = new RainbowTranceEffect(leds);
     auto partyFireEffect = new PartyFireEffect(leds);
     auto partyRippleEffect = new PartyRippleEffect(leds);
+    auto futureEffect = new FutureEffect(leds);
 
 
     // Store a reference to the fire effect for temperature override
@@ -180,6 +182,7 @@ void SmartLantern::initializeEffects() {
     effects[MODE_PARTY].push_back(rainbowTranceEffect); // Rainbow Trance
     effects[MODE_PARTY].push_back(partyFireEffect); // Party Fire
     effects[MODE_PARTY].push_back(rainbowEffect); // Rainbow
+    effects[MODE_PARTY].push_back(futureEffect);
 
 }
 
