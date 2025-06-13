@@ -108,8 +108,8 @@ void FireEffect::reset() {
 }
 
 void FireEffect::update() {
-    // Target 120 FPS for ultra-smooth fire animation
-    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
+    // Target 120 FPS for ultra-smooth fire animation but slow down the simulation more
+    if (!shouldUpdate(20)) {  // Changed from 16ms to 20ms = 50 FPS (25% slower than 62.5 FPS)
         return;
     }
 
@@ -124,9 +124,9 @@ void FireEffect::update() {
 }
 
 void FireEffect::updateFireBase() {
-    // Adjusted fire parameters for faster movement
-    int cooling = 15;  // Reduced cooling for less rapid changes but more intense fire
-    int sparking = 90; // Higher spark chance for more activity
+    // Adjusted fire parameters for higher flames
+    int cooling = 12;  // Reduced cooling further to keep heat longer (was 15)
+    int sparking = 110; // Increased spark chance for more activity (was 90)
 
     // ====== INNER STRIPS ======
     // Process each inner strip segment separately
@@ -142,16 +142,16 @@ void FireEffect::updateFireBase() {
             tempHeat[i] = heatInner[segmentStart + i];
         }
 
-        // Cool down every cell a little
+        // Cool down every cell a little - reduced cooling for higher flames
         for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
-            // More cooling at top, less at bottom
+            // Less cooling at all levels to preserve heat higher up
             int coolAmount;
-            if (i < INNER_LEDS_PER_STRIP * 0.3) {
-                coolAmount = random(0, cooling / 5); // Reduced cooling for hotter base
-            } else if (i < INNER_LEDS_PER_STRIP * 0.7) {
-                coolAmount = random(0, cooling / 3);
+            if (i < INNER_LEDS_PER_STRIP * 0.4) {
+                coolAmount = random(0, cooling / 6); // Even less cooling for hotter base (was /5)
+            } else if (i < INNER_LEDS_PER_STRIP * 0.8) {
+                coolAmount = random(0, cooling / 4); // Less cooling in middle (was /3)
             } else {
-                coolAmount = random(0, cooling / 2);
+                coolAmount = random(0, cooling / 3); // Less cooling at top (was /2)
             }
 
             if (tempHeat[i] > coolAmount) {
@@ -161,19 +161,19 @@ void FireEffect::updateFireBase() {
             }
         }
 
-        // Heat rises upward - faster mixing for more active flames
+        // Heat rises upward - stronger mixing for higher flames
         for (int i = INNER_LEDS_PER_STRIP - 1; i >= 2; i--) {
-            tempHeat[i] = (tempHeat[i] * 1 + tempHeat[i-1] * 3 + tempHeat[i-2] * 2) / 6; // Adjusted weights for faster rising
+            tempHeat[i] = (tempHeat[i] * 1 + tempHeat[i-1] * 4 + tempHeat[i-2] * 3) / 8; // Stronger upward heat flow (was /6)
         }
 
-        // Randomly ignite new sparks at the bottom
+        // Randomly ignite new sparks at the bottom - more and bigger sparks
         if (random8() < sparking) {
-            int y = random8(5); // Just the bottom few LEDs
-            tempHeat[y] = tempHeat[y] + random8(60, 140); // Larger sparks for more activity
+            int y = random8(7); // Slightly more bottom LEDs can spark (was 5)
+            tempHeat[y] = tempHeat[y] + random8(80, 160); // Even larger sparks (was 60-140)
 
-            // Occasionally add a white-hot spark (250+ is white in our color mapping)
-            if (random8() < 30) {  // 30% chance for an extra hot spark
-                tempHeat[y] = min(255, tempHeat[y] + random8(30, 60));
+            // More frequent white-hot sparks
+            if (random8() < 40) {  // 40% chance for an extra hot spark (was 30%)
+                tempHeat[y] = min(255, tempHeat[y] + random8(40, 80)); // Bigger white-hot sparks (was 30-60)
             }
         }
 
@@ -184,7 +184,7 @@ void FireEffect::updateFireBase() {
     }
 
     // ====== OUTER STRIPS ======
-    // Process each outer strip segment separately (similar changes as inner strips)
+    // Process each outer strip segment separately (same changes as inner strips)
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
         int segmentStart = segment * OUTER_LEDS_PER_STRIP;
 
@@ -197,16 +197,16 @@ void FireEffect::updateFireBase() {
             tempHeat[i] = heatOuter[segmentStart + i];
         }
 
-        // Cool down every cell a little
+        // Cool down every cell a little - reduced cooling for higher flames
         for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
-            // More cooling at top, less at bottom
+            // Less cooling at all levels to preserve heat higher up
             int coolAmount;
-            if (i < OUTER_LEDS_PER_STRIP * 0.3) {
-                coolAmount = random(0, cooling / 5); // Reduced cooling for hotter base
-            } else if (i < OUTER_LEDS_PER_STRIP * 0.7) {
-                coolAmount = random(0, cooling / 3);
+            if (i < OUTER_LEDS_PER_STRIP * 0.4) {
+                coolAmount = random(0, cooling / 6); // Even less cooling for hotter base (was /5)
+            } else if (i < OUTER_LEDS_PER_STRIP * 0.8) {
+                coolAmount = random(0, cooling / 4); // Less cooling in middle (was /3)
             } else {
-                coolAmount = random(0, cooling / 2);
+                coolAmount = random(0, cooling / 3); // Less cooling at top (was /2)
             }
 
             if (tempHeat[i] > coolAmount) {
@@ -216,19 +216,19 @@ void FireEffect::updateFireBase() {
             }
         }
 
-        // Heat rises upward - faster mixing for more active flames
+        // Heat rises upward - stronger mixing for higher flames
         for (int i = OUTER_LEDS_PER_STRIP - 1; i >= 2; i--) {
-            tempHeat[i] = (tempHeat[i] * 1 + tempHeat[i-1] * 3 + tempHeat[i-2] * 2) / 6; // Adjusted weights for faster rising
+            tempHeat[i] = (tempHeat[i] * 1 + tempHeat[i-1] * 4 + tempHeat[i-2] * 3) / 8; // Stronger upward heat flow (was /6)
         }
 
-        // Randomly ignite new sparks at the bottom
+        // Randomly ignite new sparks at the bottom - more and bigger sparks
         if (random8() < sparking) {
-            int y = random8(5); // Just the bottom few LEDs
-            tempHeat[y] = tempHeat[y] + random8(60, 140); // Larger sparks for more activity
+            int y = random8(7); // Slightly more bottom LEDs can spark (was 5)
+            tempHeat[y] = tempHeat[y] + random8(80, 160); // Even larger sparks (was 60-140)
 
-            // Occasionally add a white-hot spark (250+ is white in our color mapping)
-            if (random8() < 30) {  // 30% chance for an extra hot spark
-                tempHeat[y] = min(255, tempHeat[y] + random8(30, 60));
+            // More frequent white-hot sparks
+            if (random8() < 40) {  // 40% chance for an extra hot spark (was 30%)
+                tempHeat[y] = min(255, tempHeat[y] + random8(40, 80)); // Bigger white-hot sparks (was 30-60)
             }
         }
 
@@ -238,36 +238,76 @@ void FireEffect::updateFireBase() {
         }
     }
 
-    // Prevent any isolated bright LEDs at the top
+    // Force fade to black at the top of strips - reduce heat values based on position
     for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
-        // Get top pixel index and a few pixels below
+        int segmentStart = segment * INNER_LEDS_PER_STRIP;
+
+        for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
+            int idx = segmentStart + i;
+
+            // Apply fade reduction starting from 45% up the strip (was 60% - much lower for more black)
+            float fadeStartPosition = INNER_LEDS_PER_STRIP * 0.45f;
+
+            if (i >= fadeStartPosition) {
+                // Calculate how far up the strip we are (0.0 to 1.0)
+                float fadeProgress = (float(i) - fadeStartPosition) / (INNER_LEDS_PER_STRIP - fadeStartPosition);
+
+                // Apply much gentler fade to heat values
+                fadeProgress = fadeProgress * fadeProgress; // Square for more aggressive fade
+
+                // Reduce heat value more aggressively (75% reduction max instead of 50%)
+                float heatReduction = fadeProgress * 0.75f; // Up to 75% heat reduction at the top (was 50%)
+                heatInner[idx] = heatInner[idx] * (1.0f - heatReduction);
+            }
+        }
+
+        // Make top area more black
         int topIdx = (segment + 1) * INNER_LEDS_PER_STRIP - 1;
-
-        // If any of the top 5 LEDs are lit but the ones below are not,
-        // douse them to prevent isolated bright spots
-        for (int i = 0; i < 5 && (topIdx - i) > 5; i++) {
+        for (int i = 0; i < 5; i++) { // Clear top 5 LEDs (was 3)
             int curr = topIdx - i;
-            int below = topIdx - i - 2;
-
-            if (heatInner[curr] > 0 && heatInner[below] == 0) {
-                heatInner[curr] = 0;
+            if (curr >= segmentStart && curr < segmentStart + INNER_LEDS_PER_STRIP) {
+                if (i < 3) {
+                    heatInner[curr] = heatInner[curr] * 0.4f; // More aggressive reduction (was 0.7f)
+                } else {
+                    heatInner[curr] = heatInner[curr] * 0.6f; // More reduction (was 0.8f)
+                }
             }
         }
     }
 
-    // Same for outer strips
+    // Same fade to black logic for outer strips
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
-        // Get top pixel index and a few pixels below
+        int segmentStart = segment * OUTER_LEDS_PER_STRIP;
+
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            int idx = segmentStart + i;
+
+            // Apply fade reduction starting from 45% up the strip (was 60% - much lower for more black)
+            float fadeStartPosition = OUTER_LEDS_PER_STRIP * 0.45f;
+
+            if (i >= fadeStartPosition) {
+                // Calculate how far up the strip we are (0.0 to 1.0)
+                float fadeProgress = (float(i) - fadeStartPosition) / (OUTER_LEDS_PER_STRIP - fadeStartPosition);
+
+                // Apply much gentler fade to heat values
+                fadeProgress = fadeProgress * fadeProgress; // Square for more aggressive fade
+
+                // Reduce heat value more aggressively (75% reduction max instead of 50%)
+                float heatReduction = fadeProgress * 0.75f; // Up to 75% heat reduction at the top (was 50%)
+                heatOuter[idx] = heatOuter[idx] * (1.0f - heatReduction);
+            }
+        }
+
+        // Only prevent isolated LEDs at the very very top
         int topIdx = (segment + 1) * OUTER_LEDS_PER_STRIP - 1;
-
-        // If any of the top 5 LEDs are lit but the ones below are not,
-        // douse them to prevent isolated bright spots
-        for (int i = 0; i < 5 && (topIdx - i) > 5; i++) {
+        for (int i = 0; i < 3; i++) { // Only clear top 3 LEDs (was 8)
             int curr = topIdx - i;
-            int below = topIdx - i - 2;
-
-            if (heatOuter[curr] > 0 && heatOuter[below] == 0) {
-                heatOuter[curr] = 0;
+            if (curr >= segmentStart && curr < segmentStart + OUTER_LEDS_PER_STRIP) {
+                if (i < 2) {
+                    heatOuter[curr] = heatOuter[curr] * 0.7f; // Don't force to zero, just reduce (was 0)
+                } else {
+                    heatOuter[curr] = heatOuter[curr] * 0.8f; // Mild reduction (was 0.3f)
+                }
             }
         }
     }
@@ -315,7 +355,7 @@ void FireEffect::renderFire() {
 
     // Core strip remains off intentionally
 
-    // Render inner strips
+    // Render inner strips with more obvious fade to black
     for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
         int activePixels = 0;
 
@@ -334,13 +374,40 @@ void FireEffect::renderFire() {
                     // Set the LED color
                     uint32_t colorVal = heatToColor(heatInner[idx]);
                     CRGB color = leds.neoColorToCRGB(colorVal);
+
+                    // Apply fade to black starting at 45% up the strip (was 60% - much lower for more black)
+                    float fadeStartPosition = INNER_LEDS_PER_STRIP * 0.45f;
+
+                    if (i >= fadeStartPosition) {
+                        // Calculate fade factor with very aggressive fading
+                        float fadeProgress = (float(i) - fadeStartPosition) / (INNER_LEDS_PER_STRIP - fadeStartPosition);
+
+                        // Apply double exponential fade for extremely dramatic effect
+                        fadeProgress = fadeProgress * fadeProgress * fadeProgress; // Cube for very aggressive fade
+
+                        float fadeFactor = 1.0f - fadeProgress; // 1.0 at start, 0.0 at top
+
+                        // Apply fade by reducing all color components
+                        color.r = color.r * fadeFactor;
+                        color.g = color.g * fadeFactor;
+                        color.b = color.b * fadeFactor;
+
+                        // Force more of the top to be completely black
+                        if (i >= INNER_LEDS_PER_STRIP * 0.90f) { // Top 10% of strip forced black (was 1%)
+                            color.r = 0;
+                            color.g = 0;
+                            color.b = 0;
+                        }
+                    }
+                    // If i < fadeStartPosition, use original color (no fade)
+
                     leds.getInner()[physicalPos] = color;
                 }
             }
         }
     }
 
-    // Render outer strips
+    // Render outer strips with more obvious fade to black
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
         int activePixels = 0;
 
@@ -359,21 +426,62 @@ void FireEffect::renderFire() {
                     // Set the LED color
                     uint32_t colorVal = heatToColor(heatOuter[idx]);
                     CRGB color = leds.neoColorToCRGB(colorVal);
+
+                    // Apply fade to black starting at 45% up the strip (was 60% - much lower for more black)
+                    float fadeStartPosition = OUTER_LEDS_PER_STRIP * 0.45f;
+
+                    if (i >= fadeStartPosition) {
+                        // Calculate fade factor with very aggressive fading
+                        float fadeProgress = (float(i) - fadeStartPosition) / (OUTER_LEDS_PER_STRIP - fadeStartPosition);
+
+                        // Apply double exponential fade for extremely dramatic effect
+                        fadeProgress = fadeProgress * fadeProgress * fadeProgress; // Cube for very aggressive fade
+
+                        float fadeFactor = 1.0f - fadeProgress; // 1.0 at start, 0.0 at top
+
+                        // Apply fade by reducing all color components
+                        color.r = color.r * fadeFactor;
+                        color.g = color.g * fadeFactor;
+                        color.b = color.b * fadeFactor;
+
+                        // Force more of the top to be completely black
+                        if (i >= OUTER_LEDS_PER_STRIP * 0.90f) { // Top 10% of strip forced black (was 1%)
+                            color.r = 0;
+                            color.g = 0;
+                            color.b = 0;
+                        }
+                    }
+                    // If i < fadeStartPosition, use original color (no fade)
+
                     leds.getOuter()[physicalPos] = color;
                 }
             }
         }
     }
 
-    // FORCE-ON TEST for third outer strip
+    // FORCE-ON TEST for third outer strip with updated fade
     if (true) {
         for (int i = 0; i < 10; i++) {
             int segment = 2; // Third segment
             int physicalPos = i + segment * OUTER_LEDS_PER_STRIP;
 
             // Set to bright red
-            CRGB color = CRGB(255, 0, 0);
-            leds.getOuter()[physicalPos] = color;
+            CRGB testColor = CRGB(255, 0, 0);
+
+            // Apply the same more obvious fade logic to the test strip
+            float fadeStartPosition = OUTER_LEDS_PER_STRIP * 0.15f;
+
+            if (i >= fadeStartPosition) {
+                float fadeProgress = (float(i) - fadeStartPosition) / (OUTER_LEDS_PER_STRIP - fadeStartPosition);
+                fadeProgress = fadeProgress * fadeProgress; // More aggressive fade
+                float fadeFactor = 1.0f - fadeProgress;
+
+                testColor.r = testColor.r * fadeFactor;
+                testColor.g = testColor.g * fadeFactor;
+                testColor.b = testColor.b * fadeFactor;
+            }
+
+            leds.getOuter()[physicalPos] = testColor;
         }
     }
 }
