@@ -83,7 +83,7 @@ private:
 
     // Shimmer effect variables for core animation
     unsigned long lastShimmerUpdate;         // When shimmer was last updated
-    static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 50;  // Update shimmer every 50ms (20 FPS)
+    static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 70;  // Update shimmer every 50ms (20 FPS)
 
     // Array to store shimmer brightness multipliers for each core LED
     float* coreShimmerValues;                // Dynamic array for shimmer values
