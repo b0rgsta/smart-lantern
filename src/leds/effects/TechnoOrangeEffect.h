@@ -12,11 +12,12 @@
  * - Inner strips: Wave animation from bottom to top, then fade out (bluish-purple color)
  * - Outer strips: Orange-to-black gradient with breathing effect (20% to 100%)
  * - Core strip: Purple wave animation synchronized with inner strips
- * - Ring strip: Stays off (for button feedback)
+ * - Ring strip: Orange breathing effect that breathes opposite to outer strips
  *
  * Inner strip cycle: Fill from bottom (2 seconds) -> hold (1 second) -> fade out (3 seconds)
  * Core strip cycle: Waits for inner 50% fill -> fills with purple -> fades with inner
  * Outer strip cycle: Breathe between 20% and 100% brightness every 5 seconds
+ * Ring strip cycle: Breathe between 30% and 90% brightness opposite to outer strips
  */
 class TechnoOrangeEffect : public Effect {
 public:
@@ -89,6 +90,13 @@ private:
     static constexpr float OUTER_MIN_BRIGHTNESS = 0.2f;  // 20% minimum brightness
     static constexpr float OUTER_MAX_BRIGHTNESS = 1.0f;  // 100% maximum brightness
 
+    // Brightness constants for ring strips (breathing opposite to outer)
+    static constexpr float RING_MIN_BRIGHTNESS = 0.1f;   // 10% minimum brightness (more dramatic)
+    static constexpr float RING_MAX_BRIGHTNESS = 1.0f;   // 100% maximum brightness (more dramatic)
+
+    // Ring color definition - more red than outer strips
+    static constexpr uint32_t RING_COLOR = 0xFF2000;     // Red-orange color (more red than OUTER_COLOR)
+
     /**
      * Update the inner strip wave animation
      * Handles filling up, holding, and fading out phases
@@ -108,6 +116,12 @@ private:
     void updateOuterAnimation();
 
     /**
+     * Update the ring strip breathing effect
+     * Creates smooth breathing opposite to outer strips using orange color
+     */
+    void updateRingAnimation();
+
+    /**
      * Apply a gradient from a color to black on a strip
      * @param strip Pointer to the LED strip array
      * @param count Number of LEDs in the strip
@@ -123,6 +137,15 @@ private:
      * @param color The color to apply (as 32-bit RGB value)
      */
     void applyColorToStrip(CRGB* strip, int count, uint32_t color);
+
+    /**
+     * Apply a solid color to an entire LED strip with brightness control
+     * @param strip Pointer to the LED strip array
+     * @param count Number of LEDs in the strip
+     * @param color The color to apply (as 32-bit RGB value)
+     * @param brightness Brightness multiplier (0.0 to 1.0)
+     */
+    void applyColorToStripWithBrightness(CRGB* strip, int count, uint32_t color, float brightness);
 };
 
 #endif // TECHNO_ORANGE_EFFECT_H

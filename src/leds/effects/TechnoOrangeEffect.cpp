@@ -13,7 +13,7 @@ TechnoOrangeEffect::TechnoOrangeEffect(LEDController& ledController) : Effect(le
     outerBreathingStartTime = millis();
 
     // Don't call leds.clearAll() here as instructed
-    Serial.println("TechnoOrangeEffect created - animated inner wave, core purple wave, breathing outer gradient");
+    Serial.println("TechnoOrangeEffect created - animated inner wave, core purple wave, breathing outer gradient, breathing ring");
 }
 
 void TechnoOrangeEffect::reset() {
@@ -35,11 +35,8 @@ void TechnoOrangeEffect::update() {
     updateCoreAnimation();
     updateOuterAnimation();
 
-    // Ring strip stays off (or is handled by button feedback system)
-    if (!skipRing) {
-        // If button feedback is not active, turn off the ring
-        applyColorToStrip(leds.getRing(), LED_STRIP_RING_COUNT, 0x000000); // Black = off
-    }
+    // Update ring breathing animation (opposite to outer strips)
+    updateRingAnimation();
 
     // Show all the colors on the LED strips
     leds.showAll();
@@ -281,6 +278,35 @@ void TechnoOrangeEffect::updateOuterAnimation() {
     applyGradientToStrip(leds.getOuter(), LED_STRIP_OUTER_COUNT, OUTER_COLOR, currentBrightness);
 }
 
+void TechnoOrangeEffect::updateRingAnimation() {
+    // Skip ring if button feedback is active (effect base class handles this)
+    if (skipRing) {
+        return;
+    }
+
+    unsigned long currentTime = millis();
+    unsigned long elapsedTime = currentTime - outerBreathingStartTime;
+
+    // Calculate breathing progress (0.0 to 1.0 over the full cycle)
+    // Same timing as outer strips but inverted
+    float breathingProgress = float(elapsedTime % OUTER_BREATHING_CYCLE) / OUTER_BREATHING_CYCLE;
+
+    // Convert progress to a sine wave for smooth breathing (0 to 2*PI)
+    float sineInput = breathingProgress * 2.0f * PI;
+    float sineValue = sin(sineInput); // -1.0 to 1.0
+
+    // INVERT the sine value to make ring breathe opposite to outer strips
+    float invertedSineValue = -sineValue; // Flip the sine wave
+
+    // Convert inverted sine wave to brightness range (30% to 90%)
+    float normalizedSine = (invertedSineValue + 1.0f) / 2.0f; // 0.0 to 1.0
+    float ringBrightness = RING_MIN_BRIGHTNESS +
+                          (normalizedSine * (RING_MAX_BRIGHTNESS - RING_MIN_BRIGHTNESS));
+
+    // Apply solid red-orange color with breathing brightness to ring
+    applyColorToStripWithBrightness(leds.getRing(), LED_STRIP_RING_COUNT, RING_COLOR, ringBrightness);
+}
+
 void TechnoOrangeEffect::applyGradientToStrip(CRGB* strip, int count, uint32_t baseColor, float brightness) {
     // Convert base color to CRGB
     CRGB rgbColor = leds.neoColorToCRGB(baseColor);
@@ -315,5 +341,22 @@ void TechnoOrangeEffect::applyColorToStrip(CRGB* strip, int count, uint32_t colo
     // Set every LED in the strip to this color
     for (int i = 0; i < count; i++) {
         strip[i] = rgbColor;
+    }
+}
+
+void TechnoOrangeEffect::applyColorToStripWithBrightness(CRGB* strip, int count, uint32_t color, float brightness) {
+    // Convert the 32-bit color value to CRGB format
+    CRGB rgbColor = leds.neoColorToCRGB(color);
+
+    // Apply brightness to the color
+    CRGB finalColor = CRGB(
+        rgbColor.r * brightness,
+        rgbColor.g * brightness,
+        rgbColor.b * brightness
+    );
+
+    // Set every LED in the strip to this color with brightness applied
+    for (int i = 0; i < count; i++) {
+        strip[i] = finalColor;
     }
 }
