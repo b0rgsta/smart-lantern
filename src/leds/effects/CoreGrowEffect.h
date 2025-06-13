@@ -4,14 +4,27 @@
 #define CORE_GROW_EFFECT_H
 
 #include "Effect.h"
+#include <vector>
+
+// Structure to represent a core effect trail
+struct CoreTrail {
+    int stripType;      // 1 = inner, 2 = outer
+    int subStrip;       // Which segment (0, 1, or 2)
+    float position;     // Current head position (float for smooth movement)
+    float speed;        // Movement speed (pixels per frame)
+    bool active;        // Whether this trail is active
+    bool direction;     // true = upward, false = downward
+};
 
 /**
- * CoreGrowEffect - Effect that grows red LEDs from center, then splits and moves outward
+ * CoreGrowEffect - Effect that grows red LEDs from center, then splits and moves outward,
+ * plus trails on inner and outer strips
  *
  * Features:
- * - Phase 1: Grows from 1 to 25 LEDs from center with brightness fade
- * - Phase 2: Pattern duplicates and both copies move in opposite directions
- * - Continues until both patterns are completely off the strip
+ * - Core: Phase 1: Grows from 1 to 25 LEDs from center with brightness fade
+ * - Core: Phase 2: Pattern duplicates and both copies move in opposite directions
+ * - Outer strips: Random red trails (15 LEDs) shooting upward, white leading LED
+ * - Inner strips: Random red trails (15 LEDs) shooting downward, white leading LED
  * - All other strips remain off
  */
 class CoreGrowEffect : public Effect {
@@ -50,10 +63,38 @@ private:
     int rightPosition;                  // Center position of right-moving pattern
     unsigned long lastUpdateTime;       // Last time we updated the animation
 
-    // Timing constants
+    // Timing constants for core effect
     static const int MAX_SIZE = 12;         // Maximum LEDs on each side of center (total 25 = 12+1+12)
-    static const int GROW_INTERVAL = 140;   // Milliseconds between each growth step (30% faster: 200 * 0.7 = 140)
-    static const int MOVE_INTERVAL = 140;   // Milliseconds between each movement step (same as grow for seamless transition)
+    static const int GROW_INTERVAL = 100;   // Milliseconds between each growth step (slower for smoother appearance)
+    static const int MOVE_INTERVAL = 50;    // Milliseconds between each movement step (faster for smoother movement)
+
+    // Trail constants
+    static const int MAX_TRAILS = 24;       // Maximum number of trails at once (doubled from 12)
+    static const int TRAIL_LENGTH = 26;     // Length of each trail in LEDs (30% longer: 20 * 1.3 = 26)
+    static const int TARGET_TRAILS = 16;    // Target number of trails to maintain (doubled from 8)
+
+    // Trail timing
+    unsigned long lastTrailCreateTime;       // Last time we created a trail
+    static const int TRAIL_CREATE_INTERVAL = 80;  // Create a new trail every 80ms (very frequent)
+    static const int TRAIL_STAGGER_VARIANCE = 40; // Add random variance to prevent waves
+
+    // Trail management
+    std::vector<CoreTrail> trails;          // Collection of all trails
+
+    /**
+     * Create a new trail on a random strip
+     */
+    void createNewTrail();
+
+    /**
+     * Update all active trails
+     */
+    void updateTrails();
+
+    /**
+     * Draw all active trails
+     */
+    void drawTrails();
 
     /**
      * Calculate brightness based on distance from center
