@@ -6,10 +6,9 @@
 #include "Effect.h"
 #include <vector>
 
-// Structure to represent a core effect trail with random colors
-struct RainbowTrail {
+// Structure to represent a synchronized trail set for inner or outer strips
+struct SyncedTrail {
     int stripType;      // 1 = inner, 2 = outer
-    int subStrip;       // Which segment (0, 1, or 2)
     float position;     // Current head position (float for smooth movement)
     float speed;        // Movement speed (pixels per frame)
     bool active;        // Whether this trail is active
@@ -19,33 +18,27 @@ struct RainbowTrail {
     uint8_t brightness; // Color brightness/vibrancy for this trail (0-255)
 };
 
-// Structure to represent a ring trail (circular movement) with RGB colors
-struct RainbowRingTrail {
+// Structure to represent a continuous ring trail
+struct ContinuousRingTrail {
     float position;     // Current head position around the ring (0 to LED_STRIP_RING_COUNT)
     float speed;        // Movement speed (pixels per frame)
     int length;         // Length of the trail
-    bool active;        // Whether this trail is active
-    bool clockwise;     // true = clockwise, false = counter-clockwise
-    unsigned long creationTime;  // When this trail was created (for lifespan tracking)
-    unsigned long lifespan;      // How long this trail should live (in milliseconds)
-    uint8_t hue;        // Color hue for this ring trail (0=red, 85=green, 170=blue)
-    bool isFading;      // Whether this trail is in fade-out phase
-    unsigned long fadeStartTime; // When the fade-out started
-    static const unsigned long FADE_DURATION = 2000; // 2 seconds fade-out time
+    uint8_t hue;        // Fixed color hue for this trail (0=red, 85=green, 160=blue)
+    bool clockwise;     // Direction (always true for all 3 trails)
 };
 
 /**
  * RainbowTranceEffect - Effect that grows random colored LEDs from center, then splits and moves outward,
- * plus trails on inner and outer strips with random colors and vibrancy, and rainbow cycling ring trails
+ * plus synchronized trails on inner and outer strips, and 3 continuous RGB trails on ring
  *
  * Features:
  * - Core: Phase 1: Grows from 1 to 25 LEDs from center with random colors at full vibrance each cycle
  * - Core: Phase 2: Pattern duplicates and both copies move in opposite directions
- * - Outer strips: Random colored trails (52 LEDs) shooting upward, white leading LED, random vibrancy
- * - Inner strips: Random colored trails (52 LEDs) shooting downward, white leading LED, random vibrancy
+ * - Inner strips: All 3 segments show the same synchronized trails shooting in random directions
+ * - Outer strips: All 3 segments show the same synchronized trails shooting in random directions
+ * - Multiple trails can exist on the same strip and colors blend when overlapping
  * - Trails: Breathing effect that fades from 40% to 100% brightness
- * - Ring: Breathing red trails that move in circles and cycle through color wheel over 10 seconds
- * - All breathing elements use the same timing for synchronized effect
+ * - Ring: 3 continuous trails (red, green, blue) circling clockwise, equally spaced
  */
 class RainbowTranceEffect : public Effect {
 public:
@@ -94,40 +87,32 @@ private:
     float minBrightness;                // Minimum brightness (40%)
     float maxBrightness;                // Maximum brightness (100%)
 
-    // Ring color cycling variables (10 second cycle)
-    unsigned long colorCycleStartTime;  // When the current color cycle started
-    static const unsigned long COLOR_CYCLE_DURATION = 10000; // 10 seconds in milliseconds
-
     // Timing constants for core effect
     static const int MAX_SIZE = 12;         // Maximum LEDs on each side of center (total 25 = 12+1+12)
     static const int GROW_INTERVAL = 100;   // Milliseconds between each growth step (slower for smoother appearance)
     static const int MOVE_INTERVAL = 50;    // Milliseconds between each movement step (faster for smoother movement)
 
-    // Trail constants
-    static const int MAX_TRAILS = 24;       // Maximum number of trails at once
-    static const int TRAIL_LENGTH = 104;    // Length of each trail in LEDs (doubled from 52)
-    static const int TARGET_TRAILS = 16;    // Target number of trails to maintain
+    // Trail constants - INCREASED for more trails
+    static const int MAX_TRAILS = 30;       // Maximum number of synchronized trail sets (increased from 8)
+    static const int TRAIL_LENGTH = 104;    // Length of each trail in LEDs
+    static const int TARGET_TRAILS = 20;    // Target number of trail sets to maintain (increased from 5)
 
-    // Trail timing
+    // Trail timing - DECREASED for more frequent creation
     unsigned long lastTrailCreateTime;       // Last time we created a trail
-    static const int TRAIL_CREATE_INTERVAL = 80;  // Create a new trail every 80ms
-    static const int TRAIL_STAGGER_VARIANCE = 40; // Add random variance to prevent waves
+    static const int TRAIL_CREATE_INTERVAL = 40;   // Create a new trail every 40ms (decreased from 80ms)
+    static const int TRAIL_STAGGER_VARIANCE = 20;  // Add random variance to prevent waves (decreased from 40)
 
-    // Trail management
-    std::vector<RainbowTrail> trails;       // Collection of all trails with random colors
-    std::vector<RainbowRingTrail> ringTrails; // Collection of ring trails
+    // Trail management - now using synchronized trails
+    std::vector<SyncedTrail> syncedTrails;  // Collection of synchronized trail sets
 
-    // Ring trail constants
-    static const int MAX_RING_TRAILS = 6;        // Maximum number of ring trails at once
+    // Ring trail constants - 3 continuous trails
+    static const int NUM_RING_TRAILS = 3;        // Exactly 3 trails (red, green, blue)
     static const int RING_TRAIL_LENGTH = 12;     // Length of each ring trail in LEDs
-    static const int TARGET_RING_TRAILS = 4;     // Target number of ring trails to maintain
 
-    // Ring trail timing
-    unsigned long lastRingTrailCreateTime;       // Last time we created a ring trail
-    static const int RING_TRAIL_CREATE_INTERVAL = 150;  // Create a new ring trail every 150ms
-    static const int RING_TRAIL_STAGGER_VARIANCE = 50;  // Add random variance to prevent waves
+    // Ring trails - fixed array of 3 continuous trails
+    ContinuousRingTrail ringTrails[NUM_RING_TRAILS];
 
-    // Ring effect constants for color cycling
+    // Ring effect constants
     static constexpr float RING_MIN_BRIGHTNESS = 0.15f; // 15% minimum brightness for dramatic breathing
     static constexpr float RING_MAX_BRIGHTNESS = 1.0f;  // 100% maximum brightness for dramatic breathing
 
@@ -138,16 +123,10 @@ private:
     void generateRandomCoreColor();
 
     /**
-     * Generate random color values for a new trail
+     * Generate random color values for a new synchronized trail
      * @param trail Reference to the trail to set colors for
      */
-    void generateRandomTrailColor(RainbowTrail& trail);
-
-    /**
-     * Calculate the current color hue for ring effect based on 10-second cycle
-     * @return Hue value (0-255) that cycles through full color wheel over 10 seconds
-     */
-    uint8_t calculateRingCycleHue();
+    void generateRandomTrailColor(SyncedTrail& trail);
 
     /**
      * Calculate the current breathing brightness multiplier
@@ -164,35 +143,36 @@ private:
     float calculateRingBreathingBrightness();
 
     /**
-     * Update the ring trail effects with color cycling
-     * Manages creation and movement of circular trails around the ring
+     * Initialize the 3 continuous ring trails
+     * Called once during construction to set up red, green, blue trails
+     */
+    void initializeRingTrails();
+
+    /**
+     * Update the continuous ring trails
+     * Moves the 3 RGB trails around the ring continuously
      */
     void updateRingTrails();
 
     /**
-     * Create a new ring trail at a random position
-     */
-    void createNewRingTrail();
-
-    /**
-     * Draw all active ring trails with breathing brightness and color cycling
+     * Draw all 3 continuous ring trails
      */
     void drawRingTrails();
 
     /**
-     * Create a new trail on a random strip with random colors
+     * Create a new synchronized trail set for inner or outer strips
      */
-    void createNewTrail();
+    void createNewSyncedTrail();
 
     /**
-     * Update all active trails
+     * Update all active synchronized trails
      */
-    void updateTrails();
+    void updateSyncedTrails();
 
     /**
-     * Draw all active trails with random colors and breathing brightness
+     * Draw all active synchronized trails on all segments
      */
-    void drawTrails();
+    void drawSyncedTrails();
 
     /**
      * Calculate brightness based on distance from center

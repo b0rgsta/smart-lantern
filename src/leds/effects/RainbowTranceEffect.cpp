@@ -10,24 +10,21 @@ RainbowTranceEffect::RainbowTranceEffect(LEDController& ledController) :
     rightPosition(0),
     lastUpdateTime(0),
     lastTrailCreateTime(0),
-    lastRingTrailCreateTime(0),
     breathingPhase(0.0f),
     breathingSpeed(0.02f),      // Slow breathing cycle
     minBrightness(0.4f),        // 40% minimum brightness
-    maxBrightness(1.0f),        // 100% maximum brightness
-    colorCycleStartTime(0)      // Initialize color cycle timing
+    maxBrightness(1.0f)         // 100% maximum brightness
 {
-    // Initialize trails vectors
-    trails.reserve(MAX_TRAILS);
-    ringTrails.reserve(MAX_RING_TRAILS);
+    // Initialize synchronized trails vector with larger capacity
+    syncedTrails.reserve(MAX_TRAILS);
 
     // Generate initial random core colors (full vibrance)
     generateRandomCoreColor();
 
-    // Initialize color cycle timing
-    colorCycleStartTime = millis();
+    // Initialize the 3 continuous ring trails
+    initializeRingTrails();
 
-    Serial.println("RainbowTranceEffect created - random colored core grows + random colored trails + color cycling ring");
+    Serial.println("RainbowTranceEffect created - random colored core + synchronized inner/outer trails + 3 RGB ring trails");
 }
 
 void RainbowTranceEffect::reset() {
@@ -37,17 +34,14 @@ void RainbowTranceEffect::reset() {
     rightPosition = 0;
     lastUpdateTime = millis();
     lastTrailCreateTime = millis();
-    lastRingTrailCreateTime = millis();
 
     // Generate new random colors for core effect
     generateRandomCoreColor();
 
-    // Reset color cycle timing
-    colorCycleStartTime = millis();
-
     // DON'T clear trails - let them continue independently
-    // trails.clear(); // <- REMOVED THIS LINE
-    // ringTrails.clear(); // <- Also don't clear ring trails
+    // syncedTrails.clear(); // <- REMOVED THIS LINE
+
+    // Ring trails continue without reset - they're continuous
 
     Serial.println("RainbowTranceEffect reset to growing phase with new random colors (trails continue)");
 }
@@ -82,7 +76,7 @@ void RainbowTranceEffect::generateRandomCoreColor() {
     coreBrightness = 255;  // Full brightness = maximum intensity
 }
 
-void RainbowTranceEffect::generateRandomTrailColor(RainbowTrail& trail) {
+void RainbowTranceEffect::generateRandomTrailColor(SyncedTrail& trail) {
     // Randomly choose red, green, or blue for each trail
     int colorChoice = random(3); // 0, 1, or 2
 
@@ -104,25 +98,58 @@ void RainbowTranceEffect::generateRandomTrailColor(RainbowTrail& trail) {
     // Always use full saturation and brightness for maximum vibrance
     trail.saturation = 255;  // Full saturation = most vibrant colors
     trail.brightness = 255;  // Full brightness = maximum intensity
-
-    // Debug output for trail colors (commented out to reduce spam)
-    // String colorNames[] = {"RED", "GREEN", "BLUE"};
-    // Serial.print("New trail color: ");
-    // Serial.println(colorNames[colorChoice]);
 }
 
-uint8_t RainbowTranceEffect::calculateRingCycleHue() {
-    // Calculate how much time has passed since the color cycle started
-    unsigned long currentTime = millis();
-    unsigned long elapsedTime = currentTime - colorCycleStartTime;
+void RainbowTranceEffect::initializeRingTrails() {
+    // Initialize 3 continuous trails with fixed colors and positions
+    for (int i = 0; i < NUM_RING_TRAILS; i++) {
+        // Equally space the trails around the ring
+        ringTrails[i].position = (float)i * LED_STRIP_RING_COUNT / NUM_RING_TRAILS;
 
-    // Calculate progress through the 10-second cycle (0.0 to 1.0)
-    float cycleProgress = (float)(elapsedTime % COLOR_CYCLE_DURATION) / COLOR_CYCLE_DURATION;
+        // All trails move at the same speed, clockwise
+        ringTrails[i].speed = 0.15f;  // Moderate speed for continuous movement
+        ringTrails[i].clockwise = true;
 
-    // Convert progress to hue value (0-255 covers full color wheel)
-    uint8_t cycleHue = (uint8_t)(cycleProgress * 255);
+        // Set trail length
+        ringTrails[i].length = RING_TRAIL_LENGTH;
 
-    return cycleHue;
+        // Assign fixed colors: Red, Green, Blue
+        switch (i) {
+            case 0:
+                ringTrails[i].hue = 0;    // Red
+                break;
+            case 1:
+                ringTrails[i].hue = 85;   // Green
+                break;
+            case 2:
+                ringTrails[i].hue = 160;  // Blue
+                break;
+        }
+    }
+
+    Serial.println("Initialized 3 continuous RGB ring trails");
+}
+
+float RainbowTranceEffect::calculateBreathingBrightness() {
+    // Use sine wave to create smooth breathing effect
+    float sineValue = sin(breathingPhase);  // -1.0 to 1.0
+
+    // Convert from -1,1 range to 0,1 range
+    float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
+
+    // Map to our desired brightness range (40% to 100%)
+    return minBrightness + (normalizedSine * (maxBrightness - minBrightness));
+}
+
+float RainbowTranceEffect::calculateRingBreathingBrightness() {
+    // Use the same breathing phase as trails but with different brightness range
+    float sineValue = sin(breathingPhase);  // -1.0 to 1.0
+
+    // Convert from -1,1 range to 0,1 range
+    float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
+
+    // Map to ring-specific brightness range (15% to 100%)
+    return RING_MIN_BRIGHTNESS + (normalizedSine * (RING_MAX_BRIGHTNESS - RING_MIN_BRIGHTNESS));
 }
 
 void RainbowTranceEffect::update() {
@@ -137,16 +164,16 @@ void RainbowTranceEffect::update() {
 
     unsigned long currentTime = millis();
 
-    // Update and draw trails first (so core effect can overlap)
-    updateTrails();
-    drawTrails();
+    // Update and draw synchronized trails first (so core effect can overlap)
+    updateSyncedTrails();
+    drawSyncedTrails();
 
-    // Update ring trail effects with color cycling
+    // Update continuous ring trails
     updateRingTrails();
 
-    // Create new trails with staggered timing to prevent waves
+    // Create new synchronized trails with more aggressive creation
     int activeTrails = 0;
-    for (const auto& trail : trails) {
+    for (const auto& trail : syncedTrails) {
         if (trail.active) activeTrails++;
     }
 
@@ -155,19 +182,25 @@ void RainbowTranceEffect::update() {
 
     // Always try to maintain target trails with frequent creation
     if (activeTrails < TARGET_TRAILS && (currentTime - lastTrailCreateTime >= createInterval)) {
-        createNewTrail();
+        createNewSyncedTrail();
         lastTrailCreateTime = currentTime;
     }
 
     // More aggressive creation if we're well below target
     if (activeTrails < TARGET_TRAILS * 0.7) {
-        createNewTrail();
+        // Create multiple trails rapidly when low
+        for (int i = 0; i < 2; i++) {
+            createNewSyncedTrail();
+        }
         lastTrailCreateTime = currentTime;
     }
 
     // Emergency creation if we're very low
     if (activeTrails < TARGET_TRAILS * 0.4) {
-        createNewTrail();
+        // Create even more trails when very low
+        for (int i = 0; i < 3; i++) {
+            createNewSyncedTrail();
+        }
         lastTrailCreateTime = currentTime - createInterval; // Reset timer to allow immediate next creation
     }
 
@@ -183,34 +216,22 @@ void RainbowTranceEffect::update() {
 
                 // Set initial positions for moving phase (both start at center)
                 int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
-                int segmentCenter = coreSegmentLength / 2; // Normal center calculation
+                int segmentCenter = coreSegmentLength / 2;
                 leftPosition = segmentCenter;
                 rightPosition = segmentCenter;
 
-                // Don't update lastUpdateTime here - let the moving phase handle timing
-                // This prevents the flicker by ensuring immediate movement
-
                 Serial.println("Switching to moving phase - random colored patterns will move in both directions");
             } else {
-                Serial.print("Growing to size: ");
-                Serial.print(currentSize);
-                Serial.print(" (total LEDs: ");
-                Serial.print(1 + 2 * currentSize);
-                Serial.print(" / 25) with hue: ");
-                Serial.println(coreHue);
-
-                lastUpdateTime = currentTime; // Only update timing during normal growth
+                lastUpdateTime = currentTime;
             }
         }
 
         if (currentSize <= MAX_SIZE) {
-            // Draw growing pattern on all 3 core segments using current random colors
+            // Draw growing pattern on all 3 core segments
             int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
 
             for (int segment = 0; segment < 3; segment++) {
                 int segmentCenter = (segment * coreSegmentLength) + (coreSegmentLength / 2);
-
-                // Draw the pattern using the current random colors
                 drawPattern(segment, segmentCenter);
             }
         }
@@ -240,11 +261,11 @@ void RainbowTranceEffect::update() {
                 rightPosition = 0;
                 lastUpdateTime = currentTime;
 
-                return; // Don't call reset() which would clear trails
+                return;
             }
         }
 
-        // Always draw both moving patterns using current random colors
+        // Always draw both moving patterns
         for (int segment = 0; segment < 3; segment++) {
             int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
 
@@ -268,144 +289,25 @@ void RainbowTranceEffect::update() {
     leds.showAll();
 }
 
-float RainbowTranceEffect::calculateBreathingBrightness() {
-    // Use sine wave to create smooth breathing effect
-    // sin() returns -1 to 1, we want to map this to minBrightness to maxBrightness
-    float sineValue = sin(breathingPhase);  // -1.0 to 1.0
-
-    // Convert from -1,1 range to 0,1 range
-    float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
-
-    // Map to our desired brightness range (40% to 100%)
-    return minBrightness + (normalizedSine * (maxBrightness - minBrightness));
-}
-
-float RainbowTranceEffect::calculateRingBreathingBrightness() {
-    // Use the same breathing phase as trails but with different brightness range
-    // This keeps the ring synchronized with the trail breathing
-    float sineValue = sin(breathingPhase);  // -1.0 to 1.0
-
-    // Convert from -1,1 range to 0,1 range
-    float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
-
-    // Map to ring-specific brightness range (15% to 100%)
-    return RING_MIN_BRIGHTNESS + (normalizedSine * (RING_MAX_BRIGHTNESS - RING_MIN_BRIGHTNESS));
-}
-
 void RainbowTranceEffect::updateRingTrails() {
-    // Skip ring if button feedback is active (effect base class handles this)
+    // Skip ring if button feedback is active
     if (skipRing) {
         return;
     }
 
-    unsigned long currentTime = millis();
-
-    // Count active ring trails
-    int activeRingTrails = 0;
-    for (const auto& trail : ringTrails) {
-        if (trail.active) activeRingTrails++;
-    }
-
-    // Calculate dynamic interval with randomness to prevent synchronized waves
-    int createInterval = RING_TRAIL_CREATE_INTERVAL + random(-RING_TRAIL_STAGGER_VARIANCE, RING_TRAIL_STAGGER_VARIANCE);
-
-    // Create new ring trails as needed
-    if (activeRingTrails < TARGET_RING_TRAILS && (currentTime - lastRingTrailCreateTime >= createInterval)) {
-        createNewRingTrail();
-        lastRingTrailCreateTime = currentTime;
-    }
-
-    // Update existing ring trails
-    for (auto& trail : ringTrails) {
-        if (!trail.active) continue;
-
+    // Update positions of all 3 continuous trails
+    for (int i = 0; i < NUM_RING_TRAILS; i++) {
         // Move the trail around the ring
-        if (trail.clockwise) {
-            trail.position += trail.speed;
-            // Wrap around when we reach the end
-            if (trail.position >= LED_STRIP_RING_COUNT) {
-                trail.position -= LED_STRIP_RING_COUNT;
-            }
-        } else {
-            trail.position -= trail.speed;
-            // Wrap around when we go below 0
-            if (trail.position < 0) {
-                trail.position += LED_STRIP_RING_COUNT;
-            }
-        }
+        ringTrails[i].position += ringTrails[i].speed;
 
-        // Check if trail should start fading or be deactivated
-        if (!trail.isFading && (currentTime - trail.creationTime >= trail.lifespan)) {
-            // Start fade-out phase
-            trail.isFading = true;
-            trail.fadeStartTime = currentTime;
-        } else if (trail.isFading && (currentTime - trail.fadeStartTime >= RainbowRingTrail::FADE_DURATION)) {
-            // Fade-out complete, deactivate trail
-            trail.active = false;
+        // Wrap around when we reach the end
+        if (ringTrails[i].position >= LED_STRIP_RING_COUNT) {
+            ringTrails[i].position -= LED_STRIP_RING_COUNT;
         }
     }
 
-    // Remove inactive ring trails
-    ringTrails.erase(
-        std::remove_if(ringTrails.begin(), ringTrails.end(),
-            [](const RainbowRingTrail& t) { return !t.active; }),
-        ringTrails.end());
-
-    // Draw all active ring trails with color cycling
+    // Draw all 3 continuous ring trails
     drawRingTrails();
-}
-
-void RainbowTranceEffect::createNewRingTrail() {
-    // Don't create more ring trails if we're at maximum
-    if (ringTrails.size() >= MAX_RING_TRAILS) {
-        return;
-    }
-
-    RainbowRingTrail newTrail;
-
-    // Random starting position around the ring
-    newTrail.position = random(LED_STRIP_RING_COUNT);
-
-    // Random direction (clockwise or counter-clockwise)
-    newTrail.clockwise = random(2) == 1;
-
-    // Random speed (slower than linear trails for smooth circular motion)
-    newTrail.speed = 0.08f + (random(100) / 100.0f) * 0.12f; // 0.08 to 0.20 speed range
-
-    // Set trail length
-    newTrail.length = RING_TRAIL_LENGTH;
-
-    // Randomly choose red, green, or blue for each ring trail
-    int colorChoice = random(3); // 0, 1, or 2
-
-    switch (colorChoice) {
-        case 0:
-            // Red
-            newTrail.hue = 0;    // Red hue in FastLED
-            break;
-        case 1:
-            // Green
-            newTrail.hue = 85;   // Green hue in FastLED
-            break;
-        case 2:
-            // Blue - using a more vibrant blue
-            newTrail.hue = 160;  // More vibrant blue hue in FastLED (160 = full blue)
-            break;
-    }
-
-    // Set creation time and random lifespan (8-15 seconds for nice variety)
-    newTrail.creationTime = millis();
-    newTrail.lifespan = 8000 + random(7000); // 8000ms to 15000ms (8-15 seconds)
-
-    // Initialize fade-out variables
-    newTrail.isFading = false;
-    newTrail.fadeStartTime = 0;
-
-    // Activate the trail
-    newTrail.active = true;
-
-    // Add to ring trails vector
-    ringTrails.push_back(newTrail);
 }
 
 void RainbowTranceEffect::drawRingTrails() {
@@ -417,10 +319,11 @@ void RainbowTranceEffect::drawRingTrails() {
     // Calculate the current breathing brightness multiplier for all ring trails
     float breathingMultiplier = calculateRingBreathingBrightness();
 
-    for (const auto& trail : ringTrails) {
-        if (!trail.active) continue;
+    // Draw each of the 3 continuous trails
+    for (int t = 0; t < NUM_RING_TRAILS; t++) {
+        const auto& trail = ringTrails[t];
 
-        // Convert this trail's hue to RGB at full saturation and brightness first
+        // Convert trail's fixed hue to RGB at full saturation and brightness
         CHSV baseHSV(trail.hue, 255, 255);
         CRGB baseRGB;
         hsv2rgb_rainbow(baseHSV, baseRGB);
@@ -428,63 +331,41 @@ void RainbowTranceEffect::drawRingTrails() {
         // Draw the trail
         for (int i = 0; i < trail.length; i++) {
             // Calculate position for this part of the trail
-            int pixelPos;
-            if (trail.clockwise) {
-                // For clockwise motion, trail extends behind the head
-                pixelPos = (int)trail.position - i;
-            } else {
-                // For counter-clockwise motion, trail extends behind the head
-                pixelPos = (int)trail.position + i;
-            }
+            int pixelPos = (int)trail.position - i;
 
             // Handle wrapping around the ring
             while (pixelPos < 0) {
                 pixelPos += LED_STRIP_RING_COUNT;
             }
-            while (pixelPos >= LED_STRIP_RING_COUNT) {
-                pixelPos -= LED_STRIP_RING_COUNT;
-            }
 
-            // Calculate brightness with fade and breathing effect
+            // Calculate brightness with fade
             float brightness = 1.0f - ((float)i / trail.length);
             brightness = brightness * brightness; // Square for more dramatic fade
             brightness *= breathingMultiplier; // Apply breathing effect
 
-            // Apply fade-out if trail is fading
-            if (trail.isFading) {
-                unsigned long currentTime = millis();
-                float fadeProgress = (float)(currentTime - trail.fadeStartTime) / RainbowRingTrail::FADE_DURATION;
-                fadeProgress = min(1.0f, fadeProgress); // Clamp to 1.0
-                float fadeMultiplier = 1.0f - fadeProgress; // 1.0 to 0.0 over fade duration
-                brightness *= fadeMultiplier;
-            }
-
-            // Apply brightness directly to RGB components to avoid HSV blending issues
+            // Apply brightness directly to RGB components
             CRGB color = CRGB(
                 baseRGB.r * brightness,
                 baseRGB.g * brightness,
                 baseRGB.b * brightness
             );
 
-            // Add the color to the existing pixel (in case trails overlap)
+            // Add the color to the existing pixel (allows overlapping trails to blend)
             leds.getRing()[pixelPos] += color;
         }
     }
 }
 
-void RainbowTranceEffect::createNewTrail() {
+void RainbowTranceEffect::createNewSyncedTrail() {
     // Don't create more trails if we're at maximum
-    if (trails.size() >= MAX_TRAILS) {
+    if (syncedTrails.size() >= MAX_TRAILS) {
         return;
     }
 
-    RainbowTrail newTrail;
+    SyncedTrail newTrail;
 
     // Randomly choose inner (1) or outer (2) strips
     newTrail.stripType = random(1, 3);
-
-    // Randomly choose which segment (0, 1, or 2)
-    newTrail.subStrip = random(3);
 
     // Get strip length
     int stripLength = (newTrail.stripType == 1) ? INNER_LEDS_PER_STRIP : OUTER_LEDS_PER_STRIP;
@@ -501,11 +382,9 @@ void RainbowTranceEffect::createNewTrail() {
         newTrail.position = stripLength - 1 + TRAIL_LENGTH;
     }
 
-    // Random speed with less variation to keep trails slower and more consistent
-    float baseSpeed = 0.14f + (random(100) / 100.0f) * 0.16f; // 0.14 to 0.30 (much smaller range)
-
-    // Add minimal randomness to speed to prevent trails from moving in sync
-    float speedVariance = (random(100) / 100.0f) * 0.03f - 0.015f; // ±0.015 variance (much smaller)
+    // More varied speeds for interesting interactions when trails overlap
+    float baseSpeed = 0.10f + (random(100) / 100.0f) * 0.25f; // Wider speed range: 0.10 to 0.35
+    float speedVariance = (random(100) / 100.0f) * 0.05f - 0.025f; // ±0.025 variance
     newTrail.speed = baseSpeed + speedVariance;
     newTrail.active = true;
 
@@ -513,12 +392,12 @@ void RainbowTranceEffect::createNewTrail() {
     generateRandomTrailColor(newTrail);
 
     // Add to trails vector
-    trails.push_back(newTrail);
+    syncedTrails.push_back(newTrail);
 }
 
-void RainbowTranceEffect::updateTrails() {
-    // Update each trail
-    for (auto& trail : trails) {
+void RainbowTranceEffect::updateSyncedTrails() {
+    // Update each synchronized trail
+    for (auto& trail : syncedTrails) {
         if (!trail.active) continue;
 
         // Move the trail
@@ -544,96 +423,119 @@ void RainbowTranceEffect::updateTrails() {
     }
 
     // Remove inactive trails
-    trails.erase(
-        std::remove_if(trails.begin(), trails.end(),
-            [](const RainbowTrail& t) { return !t.active; }),
-        trails.end());
+    syncedTrails.erase(
+        std::remove_if(syncedTrails.begin(), syncedTrails.end(),
+            [](const SyncedTrail& t) { return !t.active; }),
+        syncedTrails.end());
 }
 
-void RainbowTranceEffect::drawTrails() {
+void RainbowTranceEffect::drawSyncedTrails() {
     // Calculate the current breathing brightness multiplier for all trails
     float breathingMultiplier = calculateBreathingBrightness();
 
-    for (const auto& trail : trails) {
+    // First pass: draw all trails (they will blend automatically with += operator)
+    for (const auto& trail : syncedTrails) {
         if (!trail.active) continue;
 
         // Get strip length
         int stripLength = (trail.stripType == 1) ? INNER_LEDS_PER_STRIP : OUTER_LEDS_PER_STRIP;
 
-        // Draw the trail
-        for (int i = 0; i < TRAIL_LENGTH; i++) {
-            int pixelPos;
+        // Draw the trail on ALL segments of this strip type
+        int numSegments = (trail.stripType == 1) ? NUM_INNER_STRIPS : NUM_OUTER_STRIPS;
 
-            if (trail.direction) {
-                // Upward trail: head is at position, tail extends downward
-                pixelPos = (int)trail.position - i;
-            } else {
-                // Downward trail: head is at position, tail extends upward
-                pixelPos = (int)trail.position + i;
-            }
+        for (int segment = 0; segment < numSegments; segment++) {
+            // Draw the trail
+            for (int i = 0; i < TRAIL_LENGTH; i++) {
+                int pixelPos;
 
-            // Skip if pixel is outside strip bounds (but don't stop drawing the trail)
-            if (pixelPos < 0 || pixelPos >= stripLength) continue;
-
-            // Calculate brightness with more obvious fade to black
-            // Use exponential fade for more dramatic effect
-            float brightness = 1.0f - ((float)i / TRAIL_LENGTH);
-            brightness = brightness * brightness; // Square the brightness for more dramatic fade
-
-            // Apply breathing effect to the brightness
-            brightness *= breathingMultiplier;
-
-            // Physical position calculation
-            int physicalPos = leds.mapPositionToPhysical(trail.stripType, pixelPos, trail.subStrip);
-
-            // Adjust for segment offset
-            if (trail.stripType == 1) {
-                // Inner strips
-                physicalPos += trail.subStrip * INNER_LEDS_PER_STRIP;
-            } else {
-                // Outer strips
-                physicalPos += trail.subStrip * OUTER_LEDS_PER_STRIP;
-            }
-
-            // Set color with pure RGB at head, fading to black (no white)
-            CRGB color;
-
-            // Calculate brightness fade from head (100%) to tail (0%)
-            float trailBrightness = 1.0f - ((float)i / TRAIL_LENGTH);
-            trailBrightness = trailBrightness * trailBrightness; // Square for more dramatic fade
-
-            // Apply breathing effect to the brightness
-            trailBrightness *= breathingMultiplier;
-
-            // Use the trail's RGB color throughout the entire trail, just varying brightness
-            CHSV hsvColor(trail.hue, trail.saturation, trail.brightness * trailBrightness);
-            hsv2rgb_rainbow(hsvColor, color);
-
-            // Set the LED with color blending when trails overlap
-            if (trail.stripType == 1) {
-                // Inner strips
-                if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
-                    // Add colors together for blending when trails overlap
-                    leds.getInner()[physicalPos] += color;
+                if (trail.direction) {
+                    // Upward trail: head is at position, tail extends downward
+                    pixelPos = (int)trail.position - i;
+                } else {
+                    // Downward trail: head is at position, tail extends upward
+                    pixelPos = (int)trail.position + i;
                 }
-            } else {
-                // Outer strips
-                if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
-                    // Add colors together for blending when trails overlap
-                    leds.getOuter()[physicalPos] += color;
+
+                // Skip if pixel is outside strip bounds
+                if (pixelPos < 0 || pixelPos >= stripLength) continue;
+
+                // Calculate brightness with fade
+                float brightness = 1.0f - ((float)i / TRAIL_LENGTH);
+                brightness = brightness * brightness; // Square for dramatic fade
+
+                // Apply breathing effect to the brightness
+                brightness *= breathingMultiplier;
+
+                // Reduce overall brightness slightly to prevent oversaturation when trails overlap
+                brightness *= 0.7f; // Reduce to 70% to allow better color mixing
+
+                // Physical position calculation
+                int physicalPos = leds.mapPositionToPhysical(trail.stripType, pixelPos, segment);
+
+                // Adjust for segment offset
+                if (trail.stripType == 1) {
+                    // Inner strips
+                    physicalPos += segment * INNER_LEDS_PER_STRIP;
+                } else {
+                    // Outer strips
+                    physicalPos += segment * OUTER_LEDS_PER_STRIP;
+                }
+
+                // Use the trail's RGB color throughout the entire trail
+                CHSV hsvColor(trail.hue, trail.saturation, trail.brightness * brightness);
+                CRGB color;
+                hsv2rgb_rainbow(hsvColor, color);
+
+                // Add the color to blend with existing colors when trails overlap
+                if (trail.stripType == 1) {
+                    // Inner strips
+                    if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
+                        // Use additive blending for color mixing
+                        leds.getInner()[physicalPos] += color;
+                    }
+                } else {
+                    // Outer strips
+                    if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
+                        // Use additive blending for color mixing
+                        leds.getOuter()[physicalPos] += color;
+                    }
                 }
             }
+        }
+    }
+
+    // Second pass: Apply brightness limiting to prevent oversaturation
+    // This ensures overlapping trails create nice color blends without becoming pure white
+    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
+        CRGB& pixel = leds.getInner()[i];
+        // Limit maximum brightness while preserving color ratios
+        uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
+        if (maxComponent > 200) {
+            float scale = 200.0f / maxComponent;
+            pixel.r = pixel.r * scale;
+            pixel.g = pixel.g * scale;
+            pixel.b = pixel.b * scale;
+        }
+    }
+
+    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+        CRGB& pixel = leds.getOuter()[i];
+        // Limit maximum brightness while preserving color ratios
+        uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
+        if (maxComponent > 200) {
+            float scale = 200.0f / maxComponent;
+            pixel.r = pixel.r * scale;
+            pixel.g = pixel.g * scale;
+            pixel.b = pixel.b * scale;
         }
     }
 }
 
 float RainbowTranceEffect::calculateBrightness(int offset) {
     // Create smooth fade from center (100%) to edges (15%)
-    // Center = 100%, edges = 15% (more visible than 10%)
-    float brightnessRange = 1.0f - 0.15f;  // 85% range to work with (100% to 15%)
-    float distanceRatio = (float)offset / MAX_SIZE;  // 0.0 at center, 1.0 at max distance
+    float brightnessRange = 1.0f - 0.15f;
+    float distanceRatio = (float)offset / MAX_SIZE;
 
-    // Start at 100% and reduce to 15% as distance increases
     return 1.0f - (distanceRatio * brightnessRange);
 }
 
@@ -649,7 +551,6 @@ void RainbowTranceEffect::drawPattern(int segment, int centerPos) {
 
     // Draw center LED in current random color at 100% brightness
     if (centerPos >= segmentStart && centerPos <= segmentEnd) {
-        // Use max instead of add to prevent brightness increase from overlapping
         CRGB currentColor = leds.getCore()[centerPos];
         leds.getCore()[centerPos] = CRGB(
             max(currentColor.r, coreRGB.r),
@@ -658,8 +559,7 @@ void RainbowTranceEffect::drawPattern(int segment, int centerPos) {
         );
     }
 
-    // Draw LEDs on both sides with brightness fade using current random color
-    // Use currentSize during growing phase, MAX_SIZE during moving phase
+    // Draw LEDs on both sides with brightness fade
     int drawSize = (currentPhase == GROWING) ? currentSize : MAX_SIZE;
 
     for (int offset = 1; offset <= drawSize; offset++) {
@@ -675,7 +575,6 @@ void RainbowTranceEffect::drawPattern(int segment, int centerPos) {
         // Left side LED
         int leftPos = centerPos - offset;
         if (leftPos >= segmentStart && leftPos <= segmentEnd) {
-            // Use max instead of add to prevent brightness increase from overlapping
             CRGB currentColor = leds.getCore()[leftPos];
             leds.getCore()[leftPos] = CRGB(
                 max(currentColor.r, fadedColor.r),
@@ -687,7 +586,6 @@ void RainbowTranceEffect::drawPattern(int segment, int centerPos) {
         // Right side LED
         int rightPos = centerPos + offset;
         if (rightPos >= segmentStart && rightPos <= segmentEnd) {
-            // Use max instead of add to prevent brightness increase from overlapping
             CRGB currentColor = leds.getCore()[rightPos];
             leds.getCore()[rightPos] = CRGB(
                 max(currentColor.r, fadedColor.r),
