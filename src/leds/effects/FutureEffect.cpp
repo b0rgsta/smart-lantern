@@ -8,8 +8,8 @@ FutureEffect::FutureEffect(LEDController& ledController) :
     breathingPhase(0.0f),
     unpredictableBreathingPhase(0.0f),
     unpredictableBreathingSpeed(0.01f),
-    unpredictableBreathingTarget(0.45f), // Start at middle of range
-    unpredictableBreathingCurrent(0.45f),
+    unpredictableBreathingTarget(0.55f), // Start at middle of range (increased)
+    unpredictableBreathingCurrent(0.55f),
     lastBreathingChange(0),
     lastShimmerUpdate(0)
 {
@@ -76,8 +76,8 @@ void FutureEffect::reset() {
     // Reset breathing phases
     breathingPhase = 0.0f;
     unpredictableBreathingPhase = 0.0f;
-    unpredictableBreathingCurrent = 0.45f;
-    unpredictableBreathingTarget = 0.45f;
+    unpredictableBreathingCurrent = 0.55f;
+    unpredictableBreathingTarget = 0.55f;
     lastBreathingChange = millis();
 
     // Reset shimmer values
@@ -145,12 +145,12 @@ void FutureEffect::updateUnpredictableBreathing() {
         unpredictableBreathingSpeed = MIN_BREATHING_SPEED +
             (random(100) / 100.0f) * (MAX_BREATHING_SPEED - MIN_BREATHING_SPEED);
 
-        // Randomly set a new target brightness (10% to 80%)
-        unpredictableBreathingTarget = 0.1f + (random(71) / 100.0f); // 0.1 to 0.8
+        // Randomly set a new target brightness (25% to 90% - INCREASED RANGE)
+        unpredictableBreathingTarget = 0.25f + (random(66) / 100.0f); // 0.25 to 0.90
 
         // Occasionally add a "glitch" - sudden jump to random brightness
         if (random(100) < 20) { // 20% chance of glitch
-            unpredictableBreathingCurrent = 0.1f + (random(71) / 100.0f);
+            unpredictableBreathingCurrent = 0.25f + (random(66) / 100.0f);
         }
     }
 
@@ -169,7 +169,7 @@ void FutureEffect::updateUnpredictableBreathing() {
     float sineInfluence = 0.7f;   // How much the sine wave affects the brightness
 
     float desiredBrightness = (unpredictableBreathingTarget * targetInfluence) +
-                              ((0.1f + normalizedSine * 0.7f) * sineInfluence);
+                              ((0.25f + normalizedSine * 0.65f) * sineInfluence);
 
     // Smooth transition to desired brightness
     float transitionSpeed = 0.05f;
@@ -185,8 +185,8 @@ void FutureEffect::updateUnpredictableBreathing() {
         }
     }
 
-    // Clamp to valid range (10% to 80%)
-    unpredictableBreathingCurrent = max(0.1f, min(0.8f, unpredictableBreathingCurrent));
+    // Clamp to valid range (25% to 90% - INCREASED RANGE)
+    unpredictableBreathingCurrent = max(0.25f, min(0.9f, unpredictableBreathingCurrent));
 }
 
 void FutureEffect::createNewTrail() {
@@ -268,7 +268,7 @@ void FutureEffect::drawTrails() {
             // Skip if pixel is outside strip bounds
             if (pixelPos < 0 || pixelPos >= stripLength) continue;
 
-            // Calculate brightness fade with linear fade
+            // Calculate brightness fade with REDUCED brightness for white portions
             float fadeRatio;
             if (i == 0) {
                 // Leading LED - always full brightness (100%)
@@ -277,14 +277,13 @@ void FutureEffect::drawTrails() {
                 // Second LED - 80% brightness (for blue tip)
                 fadeRatio = 0.8f;
             } else if (i == 2) {
-                // Third LED - 60% brightness (start of white trail)
-                fadeRatio = 0.6f;
+                // Third LED - reduced to 40% brightness (was 60%)
+                fadeRatio = 0.4f;
             } else {
-                // Rest of trail - linear fade from 60% to 0%
-                // We have (trailLength - 3) positions to fade over
+                // Rest of trail - linear fade from 40% to 0% (reduced from 60%)
                 float fadePosition = (float)(i - 3) / (trail.trailLength - 3);
-                // Linear interpolation from 60% to 0%
-                fadeRatio = 0.6f * (1.0f - fadePosition);
+                // Linear interpolation from 40% to 0%
+                fadeRatio = 0.4f * (1.0f - fadePosition);
             }
 
             // Calculate color based on position in trail
@@ -307,9 +306,16 @@ void FutureEffect::drawTrails() {
                     color = CRGB(r * 0.8f, g * 0.8f, b * 0.8f);
                 }
             } else {
-                // Rest of trail is white with fade applied
-                uint8_t brightness = 255 * fadeRatio;
-                color = CRGB(brightness, brightness, brightness);
+                // Rest of trail is white with BLUE TINT and reduced brightness
+                uint8_t brightness = 255 * fadeRatio * 0.6f; // Reduce white brightness by 40%
+
+                // Add blue tint to the white trail
+                // Make it slightly bluish-white instead of pure white
+                color = CRGB(
+                    brightness * 0.7f,  // Reduce red component
+                    brightness * 0.8f,  // Slightly reduce green
+                    brightness         // Keep blue at full
+                );
             }
 
             // Map logical position to physical LED position
@@ -341,31 +347,31 @@ void FutureEffect::drawTrails() {
         }
     }
 
-    // Apply brightness limiting to prevent oversaturation when trails overlap
-    // This ensures nice color mixing without becoming pure white
+    // Apply MORE AGGRESSIVE brightness limiting to make room for blue overlay
+    // This ensures the blue overlay is more visible
 
-    // Limit inner strip brightness
+    // Limit inner strip brightness MORE aggressively
     for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
         CRGB& pixel = leds.getInner()[i];
         // Find the maximum color component
         uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
         // If any component is oversaturated, scale all components down proportionally
-        if (maxComponent > 240) {  // Leave some headroom
-            float scale = 240.0f / maxComponent;
+        if (maxComponent > 160) {  // Reduced from 240 to make more room for blue
+            float scale = 160.0f / maxComponent;
             pixel.r = pixel.r * scale;
             pixel.g = pixel.g * scale;
             pixel.b = pixel.b * scale;
         }
     }
 
-    // Limit outer strip brightness
+    // Limit outer strip brightness MORE aggressively
     for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
         CRGB& pixel = leds.getOuter()[i];
         // Find the maximum color component
         uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
         // If any component is oversaturated, scale all components down proportionally
-        if (maxComponent > 240) {  // Leave some headroom
-            float scale = 240.0f / maxComponent;
+        if (maxComponent > 160) {  // Reduced from 240 to make more room for blue
+            float scale = 160.0f / maxComponent;
             pixel.r = pixel.r * scale;
             pixel.g = pixel.g * scale;
             pixel.b = pixel.b * scale;
@@ -416,17 +422,17 @@ void FutureEffect::applyBreathingEffect() {
         leds.getCore()[i] = coreColor;
     }
 
-    // Apply unpredictable breathing overlay to inner strips (10% to 80%)
+    // Apply unpredictable breathing overlay to inner strips (25% to 90% - INCREASED)
     float innerOuterIntensity = unpredictableBreathingCurrent;
 
-    // Add breathing overlay with shimmer to all inner strip LEDs
+    // Add MORE DOMINANT breathing overlay with shimmer to all inner strip LEDs
     for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
         // Apply shimmer multiplier to inner strips too
         float shimmerMultiplier = innerShimmerValues[i];
-        float finalIntensity = innerOuterIntensity * shimmerMultiplier;
+        float finalIntensity = innerOuterIntensity * shimmerMultiplier * 1.2f; // Boost by 20%
 
-        // Ensure we don't exceed 80% maximum
-        finalIntensity = min(0.8f, finalIntensity);
+        // Ensure we don't exceed 90% maximum
+        finalIntensity = min(0.9f, finalIntensity);
 
         CRGB innerOverlay = CRGB(
             blueR * finalIntensity,
@@ -434,11 +440,18 @@ void FutureEffect::applyBreathingEffect() {
             blueB * finalIntensity
         );
 
-        // Add the breathing color to existing color
-        leds.getInner()[i] += innerOverlay;
-
-        // Apply same brightness limiting as trails to prevent oversaturation
+        // Use more aggressive blending - REPLACE more than ADD
         CRGB& pixel = leds.getInner()[i];
+
+        // Blend with higher weight on the blue overlay
+        float blueWeight = 0.7f;  // 70% blue overlay
+        float trailWeight = 0.3f; // 30% original trail
+
+        pixel.r = (pixel.r * trailWeight) + (innerOverlay.r * blueWeight);
+        pixel.g = (pixel.g * trailWeight) + (innerOverlay.g * blueWeight);
+        pixel.b = (pixel.b * trailWeight) + (innerOverlay.b * blueWeight);
+
+        // Apply brightness limiting
         uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
         if (maxComponent > 240) {
             float scale = 240.0f / maxComponent;
@@ -448,14 +461,14 @@ void FutureEffect::applyBreathingEffect() {
         }
     }
 
-    // Add breathing overlay with shimmer to all outer strip LEDs
+    // Add MORE DOMINANT breathing overlay with shimmer to all outer strip LEDs
     for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
         // Apply shimmer multiplier to outer strips
         float shimmerMultiplier = outerShimmerValues[i];
-        float finalIntensity = innerOuterIntensity * shimmerMultiplier;
+        float finalIntensity = innerOuterIntensity * shimmerMultiplier * 1.2f; // Boost by 20%
 
-        // Ensure we don't exceed 80% maximum
-        finalIntensity = min(0.8f, finalIntensity);
+        // Ensure we don't exceed 90% maximum
+        finalIntensity = min(0.9f, finalIntensity);
 
         CRGB outerOverlay = CRGB(
             blueR * finalIntensity,
@@ -463,11 +476,18 @@ void FutureEffect::applyBreathingEffect() {
             blueB * finalIntensity
         );
 
-        // Add the breathing color to existing color
-        leds.getOuter()[i] += outerOverlay;
-
-        // Apply same brightness limiting as trails to prevent oversaturation
+        // Use more aggressive blending - REPLACE more than ADD
         CRGB& pixel = leds.getOuter()[i];
+
+        // Blend with higher weight on the blue overlay
+        float blueWeight = 0.7f;  // 70% blue overlay
+        float trailWeight = 0.3f; // 30% original trail
+
+        pixel.r = (pixel.r * trailWeight) + (outerOverlay.r * blueWeight);
+        pixel.g = (pixel.g * trailWeight) + (outerOverlay.g * blueWeight);
+        pixel.b = (pixel.b * trailWeight) + (outerOverlay.b * blueWeight);
+
+        // Apply brightness limiting
         uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
         if (maxComponent > 240) {
             float scale = 240.0f / maxComponent;
