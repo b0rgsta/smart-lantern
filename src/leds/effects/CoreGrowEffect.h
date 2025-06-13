@@ -16,9 +16,20 @@ struct CoreTrail {
     bool direction;     // true = upward, false = downward
 };
 
+// Structure to represent a ring trail (circular movement)
+struct RingTrail {
+    float position;     // Current head position around the ring (0 to LED_STRIP_RING_COUNT)
+    float speed;        // Movement speed (pixels per frame)
+    int length;         // Length of the trail
+    bool active;        // Whether this trail is active
+    bool clockwise;     // true = clockwise, false = counter-clockwise
+    unsigned long creationTime;  // When this trail was created (for lifespan tracking)
+    unsigned long lifespan;      // How long this trail should live (in milliseconds)
+};
+
 /**
  * CoreGrowEffect - Effect that grows red LEDs from center, then splits and moves outward,
- * plus trails on inner and outer strips with breathing brightness
+ * plus trails on inner and outer strips with breathing brightness, and breathing ring trails
  *
  * Features:
  * - Core: Phase 1: Grows from 1 to 25 LEDs from center with brightness fade
@@ -26,7 +37,8 @@ struct CoreTrail {
  * - Outer strips: Random red trails (15 LEDs) shooting upward, white leading LED
  * - Inner strips: Random red trails (15 LEDs) shooting downward, white leading LED
  * - Trails: Breathing effect that fades from 40% to 100% brightness
- * - All other strips remain off
+ * - Ring: Breathing red trails that move in circles around the ring
+ * - All breathing elements use the same timing for synchronized effect
  */
 class CoreGrowEffect : public Effect {
 public:
@@ -64,7 +76,7 @@ private:
     int rightPosition;                  // Center position of right-moving pattern
     unsigned long lastUpdateTime;       // Last time we updated the animation
 
-    // Breathing effect variables for trails
+    // Breathing effect variables for trails AND ring (synchronized)
     float breathingPhase;               // Current phase of breathing cycle (0.0 to 2*PI)
     float breathingSpeed;               // Speed of breathing cycle
     float minBrightness;                // Minimum brightness (40%)
@@ -87,12 +99,52 @@ private:
 
     // Trail management
     std::vector<CoreTrail> trails;          // Collection of all trails
+    std::vector<RingTrail> ringTrails;      // Collection of ring trails
+
+    // Ring trail constants
+    static const int MAX_RING_TRAILS = 6;        // Maximum number of ring trails at once
+    static const int RING_TRAIL_LENGTH = 12;     // Length of each ring trail in LEDs
+    static const int TARGET_RING_TRAILS = 4;     // Target number of ring trails to maintain
+
+    // Ring trail timing
+    unsigned long lastRingTrailCreateTime;       // Last time we created a ring trail
+    static const int RING_TRAIL_CREATE_INTERVAL = 150;  // Create a new ring trail every 150ms
+    static const int RING_TRAIL_STAGGER_VARIANCE = 50;  // Add random variance to prevent waves
+
+    // Ring effect constants
+    static constexpr uint32_t RING_COLOR = 0xFF0000;    // Red color for ring (matches trails)
+    static constexpr float RING_MIN_BRIGHTNESS = 0.15f; // 15% minimum brightness for more dramatic breathing
+    static constexpr float RING_MAX_BRIGHTNESS = 1.0f;  // 100% maximum brightness for more dramatic breathing
 
     /**
      * Calculate the current breathing brightness multiplier
+     * Used by both trails and ring for synchronized breathing
      * @return Brightness multiplier between minBrightness and maxBrightness
      */
     float calculateBreathingBrightness();
+
+    /**
+     * Calculate the ring breathing brightness multiplier
+     * Uses the same breathing phase but different min/max values
+     * @return Brightness multiplier between RING_MIN_BRIGHTNESS and RING_MAX_BRIGHTNESS
+     */
+    float calculateRingBreathingBrightness();
+
+    /**
+     * Update the ring trail effects
+     * Manages creation and movement of circular trails around the ring
+     */
+    void updateRingTrails();
+
+    /**
+     * Create a new ring trail at a random position
+     */
+    void createNewRingTrail();
+
+    /**
+     * Draw all active ring trails with breathing brightness
+     */
+    void drawRingTrails();
 
     /**
      * Create a new trail on a random strip

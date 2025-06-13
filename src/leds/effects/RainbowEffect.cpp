@@ -19,12 +19,13 @@ void RainbowEffect::update() {
         return;
     }
 
-    // Get time elapsed since last update for frame rate independence
-    unsigned long deltaTime = getDeltaTime();
+    // Calculate time delta manually since shouldUpdate() already updated lastUpdateTime
+    // Use a fixed 8ms delta since we're limiting to 125 FPS
+    float deltaTimeMs = 8.0f; // Fixed delta time in milliseconds
+    float deltaTimeSeconds = deltaTimeMs / 1000.0f; // Convert to seconds
 
     // Update cycle based on elapsed time and desired animation speed
-    // animationSpeed is cycles per second, so we need to convert deltaTime to seconds
-    float deltaTimeSeconds = deltaTime / 1000.0f;
+    // animationSpeed is cycles per second
     cycle += animationSpeed * deltaTimeSeconds;
 
     // Keep cycle within reasonable bounds (0-255 range)

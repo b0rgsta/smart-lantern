@@ -10,15 +10,17 @@ CoreGrowEffect::CoreGrowEffect(LEDController& ledController) :
     rightPosition(0),
     lastUpdateTime(0),
     lastTrailCreateTime(0),
+    lastRingTrailCreateTime(0),  // Initialize ring trail timing
     breathingPhase(0.0f),
     breathingSpeed(0.02f),      // Slow breathing cycle - adjust this for faster/slower breathing
     minBrightness(0.4f),        // 40% minimum brightness
     maxBrightness(1.0f)         // 100% maximum brightness
 {
-    // Initialize trails vector
+    // Initialize trails vectors
     trails.reserve(MAX_TRAILS);
+    ringTrails.reserve(MAX_RING_TRAILS);
 
-    Serial.println("CoreGrowEffect created - core grows + breathing trails");
+    Serial.println("CoreGrowEffect created - core grows + breathing trails + breathing ring trails");
 }
 
 void CoreGrowEffect::reset() {
@@ -28,9 +30,11 @@ void CoreGrowEffect::reset() {
     rightPosition = 0;
     lastUpdateTime = millis();
     lastTrailCreateTime = millis();
+    lastRingTrailCreateTime = millis();  // Reset ring trail timing
 
     // DON'T clear trails - let them continue independently
     // trails.clear(); // <- REMOVED THIS LINE
+    // ringTrails.clear(); // <- Also don't clear ring trails
 
     Serial.println("CoreGrowEffect reset to growing phase (trails continue)");
 }
@@ -39,7 +43,7 @@ void CoreGrowEffect::update() {
     // Clear all strips first
     leds.clearAll();
 
-    // Update breathing phase for trails
+    // Update breathing phase for trails AND ring (synchronized)
     breathingPhase += breathingSpeed;
     if (breathingPhase > 2.0f * PI) {
         breathingPhase -= 2.0f * PI;  // Keep phase in 0 to 2*PI range
@@ -50,6 +54,9 @@ void CoreGrowEffect::update() {
     // Update and draw trails first (so core effect can overlap)
     updateTrails();
     drawTrails();
+
+    // Update ring trail effects (replaces single breathing ring)
+    updateRingTrails();
 
     // Create new trails with staggered timing to prevent waves
     int activeTrails = 0;
@@ -187,6 +194,154 @@ float CoreGrowEffect::calculateBreathingBrightness() {
 
     // Map to our desired brightness range (40% to 100%)
     return minBrightness + (normalizedSine * (maxBrightness - minBrightness));
+}
+
+float CoreGrowEffect::calculateRingBreathingBrightness() {
+    // Use the same breathing phase as trails but with different brightness range
+    // This keeps the ring synchronized with the trail breathing
+    float sineValue = sin(breathingPhase);  // -1.0 to 1.0
+
+    // Convert from -1,1 range to 0,1 range
+    float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
+
+    // Map to ring-specific brightness range (30% to 80%)
+    return RING_MIN_BRIGHTNESS + (normalizedSine * (RING_MAX_BRIGHTNESS - RING_MIN_BRIGHTNESS));
+}
+
+void CoreGrowEffect::updateRingTrails() {
+    // Skip ring if button feedback is active (effect base class handles this)
+    if (skipRing) {
+        return;
+    }
+
+    unsigned long currentTime = millis();
+
+    // Count active ring trails
+    int activeRingTrails = 0;
+    for (const auto& trail : ringTrails) {
+        if (trail.active) activeRingTrails++;
+    }
+
+    // Calculate dynamic interval with randomness to prevent synchronized waves
+    int createInterval = RING_TRAIL_CREATE_INTERVAL + random(-RING_TRAIL_STAGGER_VARIANCE, RING_TRAIL_STAGGER_VARIANCE);
+
+    // Create new ring trails as needed
+    if (activeRingTrails < TARGET_RING_TRAILS && (currentTime - lastRingTrailCreateTime >= createInterval)) {
+        createNewRingTrail();
+        lastRingTrailCreateTime = currentTime;
+    }
+
+    // Update existing ring trails
+    for (auto& trail : ringTrails) {
+        if (!trail.active) continue;
+
+        // Move the trail around the ring
+        if (trail.clockwise) {
+            trail.position += trail.speed;
+            // Wrap around when we reach the end
+            if (trail.position >= LED_STRIP_RING_COUNT) {
+                trail.position -= LED_STRIP_RING_COUNT;
+            }
+        } else {
+            trail.position -= trail.speed;
+            // Wrap around when we go below 0
+            if (trail.position < 0) {
+                trail.position += LED_STRIP_RING_COUNT;
+            }
+        }
+
+        // Check if trail has exceeded its lifespan
+        if (currentTime - trail.creationTime >= trail.lifespan) {
+            trail.active = false;
+        }
+    }
+
+    // Remove inactive ring trails
+    ringTrails.erase(
+        std::remove_if(ringTrails.begin(), ringTrails.end(),
+            [](const RingTrail& t) { return !t.active; }),
+        ringTrails.end());
+
+    // Draw all active ring trails
+    drawRingTrails();
+}
+
+void CoreGrowEffect::createNewRingTrail() {
+    // Don't create more ring trails if we're at maximum
+    if (ringTrails.size() >= MAX_RING_TRAILS) {
+        return;
+    }
+
+    RingTrail newTrail;
+
+    // Random starting position around the ring
+    newTrail.position = random(LED_STRIP_RING_COUNT);
+
+    // Random direction (clockwise or counter-clockwise)
+    newTrail.clockwise = random(2) == 1;
+
+    // Random speed (slower than linear trails for smooth circular motion)
+    newTrail.speed = 0.08f + (random(100) / 100.0f) * 0.12f; // 0.08 to 0.20 speed range
+
+    // Set trail length
+    newTrail.length = RING_TRAIL_LENGTH;
+
+    // Set creation time and random lifespan (8-15 seconds for nice variety)
+    newTrail.creationTime = millis();
+    newTrail.lifespan = 8000 + random(7000); // 8000ms to 15000ms (8-15 seconds)
+
+    // Activate the trail
+    newTrail.active = true;
+
+    // Add to ring trails vector
+    ringTrails.push_back(newTrail);
+}
+
+void CoreGrowEffect::drawRingTrails() {
+    // Clear the ring first
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        leds.getRing()[i] = CRGB::Black;
+    }
+
+    // Calculate the current breathing brightness multiplier for all ring trails
+    float breathingMultiplier = calculateRingBreathingBrightness();
+
+    for (const auto& trail : ringTrails) {
+        if (!trail.active) continue;
+
+        // Draw the trail
+        for (int i = 0; i < trail.length; i++) {
+            // Calculate position for this part of the trail
+            int pixelPos;
+            if (trail.clockwise) {
+                // For clockwise motion, trail extends behind the head
+                pixelPos = (int)trail.position - i;
+            } else {
+                // For counter-clockwise motion, trail extends behind the head
+                pixelPos = (int)trail.position + i;
+            }
+
+            // Handle wrapping around the ring
+            while (pixelPos < 0) {
+                pixelPos += LED_STRIP_RING_COUNT;
+            }
+            while (pixelPos >= LED_STRIP_RING_COUNT) {
+                pixelPos -= LED_STRIP_RING_COUNT;
+            }
+
+            // Calculate brightness with fade and breathing effect
+            float brightness = 1.0f - ((float)i / trail.length);
+            brightness = brightness * brightness; // Square for more dramatic fade
+            brightness *= breathingMultiplier; // Apply breathing effect
+
+            // Pure red color for all pixels in ring trails (no white tips)
+            uint8_t redValue = 255 * brightness;
+            CRGB color = CRGB(redValue, 0, 0);
+
+            // Add the color to the existing pixel (in case trails overlap)
+            leds.getRing()[pixelPos] += color;
+        }
+    }
 }
 
 void CoreGrowEffect::createNewTrail() {
