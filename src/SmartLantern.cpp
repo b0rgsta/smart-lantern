@@ -15,6 +15,8 @@
 #include "leds/effects/CoreGrowEffect.h"
 #include "leds/effects/TechnoOrangeEffect.h"
 #include "leds/effects/RainbowTranceEffect.h"
+#include "leds/effects/PartyFireEffect.h"
+
 
 
 SmartLantern::SmartLantern() : isPowerOn(false),
@@ -64,7 +66,7 @@ void SmartLantern::initializeEffects() {
     auto coreGrowEffect = new CoreGrowEffect(leds);
     auto technoOrangeEffect = new TechnoOrangeEffect(leds);
     auto rainbowTranceEffect = new RainbowTranceEffect(leds);
-
+    auto partyFireEffect = new PartyFireEffect(leds);
 
 
 
@@ -174,6 +176,8 @@ void SmartLantern::initializeEffects() {
     effects[MODE_PARTY].push_back(partyRippleEffect); // Party ripple
     effects[MODE_PARTY].push_back(technoOrangeEffect);
     effects[MODE_PARTY].push_back(rainbowTranceEffect); // Rainbow Trance
+    effects[MODE_PARTY].push_back(partyFireEffect); // Party Fire
+
 
 }
 
