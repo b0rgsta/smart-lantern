@@ -78,6 +78,11 @@ private:
   unsigned long lowLightStartTime;
   unsigned long autoOnTime;
 
+  // Debounce timing for mode and effect buttons
+  unsigned long lastModeChangeTime;
+  unsigned long lastEffectChangeTime;
+  static const unsigned long BUTTON_DEBOUNCE_TIME = 250; // 1/3 second in milliseconds
+
   // Private helper functions
   void updateBrightnessFromTOF();  // Updates LED brightness based on TOF sensor
   void processTouchInputs();

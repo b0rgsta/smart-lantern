@@ -11,11 +11,11 @@
  * This effect creates dynamic animations on each strip:
  * - Inner strips: Wave animation from bottom to top, then fade out (bluish-purple color)
  * - Outer strips: Orange-to-black gradient with breathing effect (20% to 100%)
- * - Core strip: Purple wave animation synchronized with inner strips
+ * - Core strip: Purple wave animation synchronized with inner strips (with shimmer effect)
  * - Ring strip: Orange breathing effect that breathes opposite to outer strips
  *
  * Inner strip cycle: Fill from bottom (2 seconds) -> hold (1 second) -> fade out (3 seconds)
- * Core strip cycle: Waits for inner 50% fill -> fills with purple -> fades with inner
+ * Core strip cycle: Waits for inner 50% fill -> fills with purple + shimmer -> fades with inner
  * Outer strip cycle: Breathe between 20% and 100% brightness every 5 seconds
  * Ring strip cycle: Breathe between 30% and 90% brightness opposite to outer strips
  */
@@ -26,6 +26,11 @@ public:
      * @param ledController Reference to the LED controller for drawing
      */
     TechnoOrangeEffect(LEDController& ledController);
+
+    /**
+     * Destructor - cleans up allocated memory
+     */
+    ~TechnoOrangeEffect();
 
     /**
      * Update the effect - applies the colors to all strips
@@ -76,6 +81,13 @@ private:
     // Outer strip breathing variables
     unsigned long outerBreathingStartTime;   // When outer breathing cycle started
 
+    // Shimmer effect variables for core animation
+    unsigned long lastShimmerUpdate;         // When shimmer was last updated
+    static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 50;  // Update shimmer every 50ms (20 FPS)
+
+    // Array to store shimmer brightness multipliers for each core LED
+    float* coreShimmerValues;                // Dynamic array for shimmer values
+
     // Timing constants (in milliseconds) - moved to public section for access
     static constexpr unsigned long INNER_FILL_TIME = 2000;     // 2 seconds to fill from bottom to top
     static constexpr unsigned long INNER_HOLD_TIME = 1000;     // 1 second hold at full brightness
@@ -108,6 +120,12 @@ private:
      * Handles waiting, filling up, and fading out phases (synchronized with inner strips)
      */
     void updateCoreAnimation();
+
+    /**
+     * Update the shimmer effect for core LEDs
+     * Creates random brightness variations for a dazzling effect
+     */
+    void updateCoreShimmer();
 
     /**
      * Update the outer strip breathing effect

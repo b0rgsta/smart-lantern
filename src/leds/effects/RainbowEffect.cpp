@@ -1,10 +1,19 @@
 #include "RainbowEffect.h"
 
-RainbowEffect::RainbowEffect(LEDController &ledController) : Effect(ledController),
-                                                             cycle(0),
-                                                             animationSpeed(30.0f), // 30 cycles per second for smooth rainbow movement
-                                                             breathingPhase(0.0f),
-                                                             breathingSpeed(0.004f)  // Speed to complete 5 second breathing cycle (2*PI / 5000ms * 8ms)
+RainbowEffect::RainbowEffect(LEDController &ledController,
+                           bool enableCore,
+                           bool enableInner,
+                           bool enableOuter,
+                           bool enableRing) :
+    Effect(ledController),
+    cycle(0),
+    animationSpeed(30.0f), // 30 cycles per second for smooth rainbow movement
+    breathingPhase(0.0f),
+    breathingSpeed(0.004f), // Speed to complete 5 second breathing cycle (2*PI / 5000ms * 8ms)
+    coreEnabled(enableCore),
+    innerEnabled(enableInner),
+    outerEnabled(enableOuter),
+    ringEnabled(enableRing)
 {
     // Constructor - no LED clearing as per instructions
 }
@@ -21,6 +30,9 @@ void RainbowEffect::update() {
         // 8ms = 125 FPS (close to 120)
         return;
     }
+
+    // Clear all LEDs first - this ensures disabled strips stay off
+    leds.clearAll();
 
     // Calculate time delta manually since shouldUpdate() already updated lastUpdateTime
     // Use a fixed 8ms delta since we're limiting to 125 FPS
@@ -53,35 +65,45 @@ void RainbowEffect::update() {
     uint16_t baseHue = (uint16_t) (cycle * 256);
 
     // Core strip - gradient around the strip with breathing brightness and 2x speed
-    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
-        // Make core colors move twice as fast by multiplying baseHue by 2
-        int pixelHue = (baseHue * 2) + (i * 65536 / LED_STRIP_CORE_COUNT);
+    // Only update if core is enabled
+    if (coreEnabled) {
+        for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+            // Make core colors move twice as fast by multiplying baseHue by 2
+            int pixelHue = (baseHue * 2) + (i * 65536 / LED_STRIP_CORE_COUNT);
 
-        // Create the rainbow color at full brightness first
-        CHSV hsvColor(pixelHue >> 8, 255, 255);
-        CRGB rgbColor;
-        hsv2rgb_rainbow(hsvColor, rgbColor);
+            // Create the rainbow color at full brightness first
+            CHSV hsvColor(pixelHue >> 8, 255, 255);
+            CRGB rgbColor;
+            hsv2rgb_rainbow(hsvColor, rgbColor);
 
-        // Apply breathing brightness to the RGB color
-        rgbColor.nscale8_video((uint8_t)(coreBrightness * 255));
+            // Apply breathing brightness to the RGB color
+            rgbColor.nscale8_video((uint8_t)(coreBrightness * 255));
 
-        leds.getCore()[i] = rgbColor;
+            leds.getCore()[i] = rgbColor;
+        }
     }
 
     // Inner strip - normal rainbow gradient (no breathing)
-    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
-        int pixelHue = baseHue + (i * 65536 / LED_STRIP_INNER_COUNT);
-        leds.getInner()[i] = CHSV(pixelHue >> 8, 255, 255);
+    // Only update if inner is enabled
+    if (innerEnabled) {
+        for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
+            int pixelHue = baseHue + (i * 65536 / LED_STRIP_INNER_COUNT);
+            leds.getInner()[i] = CHSV(pixelHue >> 8, 255, 255);
+        }
     }
 
     // Outer strip - normal rainbow gradient (no breathing)
-    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
-        int pixelHue = baseHue + (i * 65536 / LED_STRIP_OUTER_COUNT);
-        leds.getOuter()[i] = CHSV(pixelHue >> 8, 255, 255);
+    // Only update if outer is enabled
+    if (outerEnabled) {
+        for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+            int pixelHue = baseHue + (i * 65536 / LED_STRIP_OUTER_COUNT);
+            leds.getOuter()[i] = CHSV(pixelHue >> 8, 255, 255);
+        }
     }
 
     // Ring strip - normal rainbow gradient (no breathing, unless skipped for button feedback)
-    if (!skipRing) {
+    // Only update if ring is enabled AND not skipped for button feedback
+    if (ringEnabled && !skipRing) {
         for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
             int pixelHue = baseHue + (i * 65536 / LED_STRIP_RING_COUNT);
             leds.getRing()[i] = CHSV(pixelHue >> 8, 255, 255);

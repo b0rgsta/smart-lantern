@@ -9,14 +9,23 @@
  * This effect creates a rainbow pattern that continuously shifts colors.
  * The animation speed is frame rate independent.
  * The core strip breathes in and out over 5 seconds (fading from full brightness to off and back).
+ * Individual strips can be enabled/disabled via constructor parameters.
  */
 class RainbowEffect : public Effect {
 public:
     /**
      * Constructor
      * @param ledController Reference to the LED controller
+     * @param enableCore Whether to show rainbow on core strip (default: true)
+     * @param enableInner Whether to show rainbow on inner strips (default: true)
+     * @param enableOuter Whether to show rainbow on outer strips (default: true)
+     * @param enableRing Whether to show rainbow on ring strip (default: true)
      */
-    RainbowEffect(LEDController& ledController);
+    RainbowEffect(LEDController& ledController,
+                  bool enableCore = true,
+                  bool enableInner = true,
+                  bool enableOuter = true,
+                  bool enableRing = true);
 
     /**
      * Update the rainbow animation
@@ -42,6 +51,12 @@ private:
     // Core breathing effect variables
     float breathingPhase;   // Current phase of breathing cycle (0.0 to 2*PI)
     float breathingSpeed;   // Speed of breathing cycle (to complete 5 second cycle)
+
+    // Strip enable flags - control which strips show the rainbow effect
+    bool coreEnabled;       // Whether core strip shows rainbow (with breathing)
+    bool innerEnabled;      // Whether inner strips show rainbow
+    bool outerEnabled;      // Whether outer strips show rainbow
+    bool ringEnabled;       // Whether ring strip shows rainbow
 };
 
 #endif // RAINBOW_EFFECT_H

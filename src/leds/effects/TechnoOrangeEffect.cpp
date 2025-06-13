@@ -12,8 +12,26 @@ TechnoOrangeEffect::TechnoOrangeEffect(LEDController& ledController) : Effect(le
     coreFillPosition = 0;
     outerBreathingStartTime = millis();
 
+    // Initialize shimmer timing
+    lastShimmerUpdate = millis();
+
+    // Allocate memory for shimmer values array
+    coreShimmerValues = new float[LED_STRIP_CORE_COUNT];
+
+    // Initialize all shimmer values to 1.0 (no effect initially)
+    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+        coreShimmerValues[i] = 1.0f;
+    }
+
     // Don't call leds.clearAll() here as instructed
-    Serial.println("TechnoOrangeEffect created - animated inner wave, core purple wave, breathing outer gradient, breathing ring");
+    Serial.println("TechnoOrangeEffect created - animated inner wave, shimmering core purple wave, breathing outer gradient, breathing ring");
+}
+
+TechnoOrangeEffect::~TechnoOrangeEffect() {
+    // Clean up allocated shimmer array
+    if (coreShimmerValues) {
+        delete[] coreShimmerValues;
+    }
 }
 
 void TechnoOrangeEffect::reset() {
@@ -25,6 +43,12 @@ void TechnoOrangeEffect::reset() {
     innerFillPosition = 0;
     coreFillPosition = 0;
     outerBreathingStartTime = millis();
+
+    // Reset shimmer values
+    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+        coreShimmerValues[i] = 1.0f;
+    }
+    lastShimmerUpdate = millis();
 
     Serial.println("TechnoOrangeEffect reset - all animations restarted");
 }
@@ -158,9 +182,49 @@ void TechnoOrangeEffect::updateInnerAnimation() {
     }
 }
 
+void TechnoOrangeEffect::updateCoreShimmer() {
+    unsigned long currentTime = millis();
+
+    // Only update shimmer at specified intervals
+    if (currentTime - lastShimmerUpdate < SHIMMER_UPDATE_INTERVAL) {
+        return;
+    }
+
+    lastShimmerUpdate = currentTime;
+
+    // Update shimmer values for each LED
+    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+        // Higher chance for each LED to shimmer (50% instead of 30%)
+        if (random(100) < 50) {  // 50% chance per frame for each LED to change
+            // Create more dramatic shimmer effect with values between 0.4 and 1.6
+            // This creates a ±60% brightness variation (much more noticeable)
+            coreShimmerValues[i] = 0.4f + (random(120) / 100.0f);  // 0.4 to 1.6
+
+            // Occasionally create super bright flashes (10% chance)
+            if (random(100) < 10) {
+                coreShimmerValues[i] = 1.8f + (random(40) / 100.0f);  // 1.8 to 2.2 for bright flashes
+            }
+        } else {
+            // Faster return to normal brightness for more active shimmering
+            if (coreShimmerValues[i] < 1.0f) {
+                coreShimmerValues[i] += 0.1f;  // Faster fade up (was 0.05f)
+                if (coreShimmerValues[i] > 1.0f) coreShimmerValues[i] = 1.0f;
+            } else if (coreShimmerValues[i] > 1.0f) {
+                coreShimmerValues[i] -= 0.1f;  // Faster fade down (was 0.05f)
+                if (coreShimmerValues[i] < 1.0f) coreShimmerValues[i] = 1.0f;
+            }
+        }
+    }
+}
+
 void TechnoOrangeEffect::updateCoreAnimation() {
     unsigned long currentTime = millis();
     unsigned long elapsedTime = currentTime - coreAnimationStartTime;
+
+    // Update shimmer effect for all core states except waiting
+    if (coreState != CORE_WAITING) {
+        updateCoreShimmer();
+    }
 
     // Handle the current core animation state
     switch (coreState) {
@@ -191,12 +255,16 @@ void TechnoOrangeEffect::updateCoreAnimation() {
 
                     // Use the same logic as inner strips - simple position comparison
                     if (led < precisePosition - fadeLength) {
-                        // LEDs below the fade zone: fully lit (purple color at 45% brightness)
+                        // LEDs below the fade zone: fully lit (purple color at 45% brightness with shimmer)
                         CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
+
+                        // Apply shimmer multiplier to create dazzling effect
+                        float shimmerMultiplier = coreShimmerValues[physicalPos];
+
                         CRGB dimmedColor = CRGB(
-                            baseColor.r * 0.45f,
-                            baseColor.g * 0.45f,
-                            baseColor.b * 0.45f
+                            baseColor.r * 0.45f * shimmerMultiplier,
+                            baseColor.g * 0.45f * shimmerMultiplier,
+                            baseColor.b * 0.45f * shimmerMultiplier
                         );
                         leds.getCore()[physicalPos] = dimmedColor;
                     } else if (led <= precisePosition) {
@@ -208,12 +276,15 @@ void TechnoOrangeEffect::updateCoreAnimation() {
                         // Apply smooth curve for natural fade
                         fadeProgress = sqrt(fadeProgress);
 
-                        // Calculate faded purple color
+                        // Apply shimmer to the fading edge too
+                        float shimmerMultiplier = coreShimmerValues[physicalPos];
+
+                        // Calculate faded purple color with shimmer
                         CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
                         CRGB fadedColor = CRGB(
-                            baseColor.r * fadeProgress * 0.45f,
-                            baseColor.g * fadeProgress * 0.45f,
-                            baseColor.b * fadeProgress * 0.45f
+                            baseColor.r * fadeProgress * 0.45f * shimmerMultiplier,
+                            baseColor.g * fadeProgress * 0.45f * shimmerMultiplier,
+                            baseColor.b * fadeProgress * 0.45f * shimmerMultiplier
                         );
 
                         leds.getCore()[physicalPos] = fadedColor;
@@ -242,15 +313,19 @@ void TechnoOrangeEffect::updateCoreAnimation() {
             float fadeProgress = 1.0f - (float(timeSinceInnerFadeStarted) / INNER_FADE_TIME);
             fadeProgress = max(0.0f, fadeProgress); // Don't go below 0
 
-            // Apply faded purple color to all core LEDs at 15% brightness
+            // Apply faded purple color to all core LEDs at 45% brightness with shimmer
             CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
-            CRGB fadedColor = CRGB(
-                baseColor.r * fadeProgress * 0.45f,  // Apply both fade and 15% brightness
-                baseColor.g * fadeProgress * 0.45f,  // Apply both fade and 15% brightness
-                baseColor.b * fadeProgress * 0.45f   // Apply both fade and 15% brightness
-            );
 
             for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+                // Apply shimmer during fade for continued dazzle effect
+                float shimmerMultiplier = coreShimmerValues[i];
+
+                CRGB fadedColor = CRGB(
+                    baseColor.r * fadeProgress * 0.45f * shimmerMultiplier,
+                    baseColor.g * fadeProgress * 0.45f * shimmerMultiplier,
+                    baseColor.b * fadeProgress * 0.45f * shimmerMultiplier
+                );
+
                 leds.getCore()[i] = fadedColor;
             }
             break;

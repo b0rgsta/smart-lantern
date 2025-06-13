@@ -18,7 +18,6 @@
 #include "leds/effects/PartyFireEffect.h"
 
 
-
 SmartLantern::SmartLantern() : isPowerOn(false),
                                isAutoOn(false),
                                currentMode(MODE_AMBIENT),
@@ -31,6 +30,8 @@ SmartLantern::SmartLantern() : isPowerOn(false),
                                isWindingDown(false), // Initialize wind-down state
                                windDownPosition(0), // Start wind-down position
                                lastWindDownTime(0), // Initialize timing
+                               lastModeChangeTime(0), // Initialize mode debounce timing
+                               lastEffectChangeTime(0), // Initialize effect debounce timing
                                buttonFeedback(leds) {
     // Initialize the effects vector structure
     effects.resize(5); // One vector for each mode (0-4)
@@ -57,7 +58,17 @@ void SmartLantern::initializeEffects() {
     // Create the effect instances
     auto startupEffect = new StartupEffect(leds);
     auto trailsEffect = new TrailsEffect(leds);
+    // Create two rainbow effects with different parameters
+    // First one: all strips enabled (for party mode)
     auto rainbowEffect = new RainbowEffect(leds);
+
+    // Second one: core and ring disabled (for animated mode)
+    auto rainbowEffectNoCore = new RainbowEffect(leds,
+        false,  // core disabled
+        true,   // inner enabled
+        true,   // outer enabled
+        false   // ring disabled
+    );
     auto fireEffect = new FireEffect(leds);
     auto matrixEffect = new MatrixEffect(leds);
     auto acceleratingTrailsEffect = new AcceleratingTrailsEffect(leds);
@@ -67,8 +78,6 @@ void SmartLantern::initializeEffects() {
     auto technoOrangeEffect = new TechnoOrangeEffect(leds);
     auto rainbowTranceEffect = new RainbowTranceEffect(leds);
     auto partyFireEffect = new PartyFireEffect(leds);
-
-
 
 
     // Store a reference to the fire effect for temperature override
@@ -155,30 +164,22 @@ void SmartLantern::initializeEffects() {
     effects[MODE_GRADIENT].push_back(purpleBlueOpposingGradient);
     effects[MODE_GRADIENT].push_back(opposingRainbowGradient);
     effects[MODE_GRADIENT].push_back(sunsetGradient);
-    effects[MODE_GRADIENT].push_back(bavariaGradient);
     effects[MODE_GRADIENT].push_back(christmasGradient);
 
     // MODE_ANIMATED
     effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
     effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
-    effects[MODE_ANIMATED].push_back(trailsEffect); // Trails effect
     effects[MODE_ANIMATED].push_back(matrixEffect); // Matrix effect
-    effects[MODE_ANIMATED].push_back(acceleratingTrailsEffect); // Accelerating trails
-    effects[MODE_ANIMATED].push_back(rainbowEffect); // Rainbow effect
+    effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
 
 
     // MODE_PARTY
     effects[MODE_PARTY].push_back(rainbowEffect); // Rainbow
     effects[MODE_PARTY].push_back(coreGrowEffect); // Core ripple
-    effects[MODE_PARTY].push_back(trailsEffect); // Trails
     effects[MODE_PARTY].push_back(matrixEffect); // Matrix
-    effects[MODE_PARTY].push_back(acceleratingTrailsEffect); // Accelerating trails
-    effects[MODE_PARTY].push_back(partyRippleEffect); // Party ripple
     effects[MODE_PARTY].push_back(technoOrangeEffect);
     effects[MODE_PARTY].push_back(rainbowTranceEffect); // Rainbow Trance
     effects[MODE_PARTY].push_back(partyFireEffect); // Party Fire
-
-
 }
 
 void SmartLantern::begin() {
@@ -467,22 +468,34 @@ void SmartLantern::processTouchInputs() {
 
     // Check for mode button (only works when powered on)
     if (sensors.isNewTouch(MODE_BUTTON_CHANNEL) && isPowerOn) {
-        nextMode();
+        unsigned long currentTime = millis();
 
-        // Show visual feedback for mode selection
-        // We have 4 modes (1-4, skipping MODE_OFF which is 0)
-        int displayMode = currentMode - 1; // Convert to 0-based index (MODE_AMBIENT=1 becomes 0, etc.)
-        buttonFeedback.showModeSelection(displayMode, 4); // 4 total modes to display
+        // Check if enough time has passed since last mode change (debouncing)
+        if (currentTime - lastModeChangeTime >= BUTTON_DEBOUNCE_TIME) {
+            nextMode();
+            lastModeChangeTime = currentTime; // Update the last change time
+
+            // Show visual feedback for mode selection
+            // We have 4 modes (1-4, skipping MODE_OFF which is 0)
+            int displayMode = currentMode - 1; // Convert to 0-based index (MODE_AMBIENT=1 becomes 0, etc.)
+            buttonFeedback.showModeSelection(displayMode, 4); // 4 total modes to display
+        }
     }
 
     // Check for effect button (only works when powered on)
     if (sensors.isNewTouch(EFFECT_BUTTON_CHANNEL) && isPowerOn) {
-        nextEffect();
+        unsigned long currentTime = millis();
 
-        // Show visual feedback for effect selection
-        // Get the number of effects available for the current mode
-        int numEffects = effects[currentMode].size();
-        buttonFeedback.showEffectSelection(currentEffect, numEffects);
+        // Check if enough time has passed since last effect change (debouncing)
+        if (currentTime - lastEffectChangeTime >= BUTTON_DEBOUNCE_TIME) {
+            nextEffect();
+            lastEffectChangeTime = currentTime; // Update the last change time
+
+            // Show visual feedback for effect selection
+            // Get the number of effects available for the current mode
+            int numEffects = effects[currentMode].size();
+            buttonFeedback.showEffectSelection(currentEffect, numEffects);
+        }
     }
 }
 
