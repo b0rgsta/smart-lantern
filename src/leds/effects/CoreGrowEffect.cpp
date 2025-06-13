@@ -9,12 +9,16 @@ CoreGrowEffect::CoreGrowEffect(LEDController& ledController) :
     leftPosition(0),
     rightPosition(0),
     lastUpdateTime(0),
-    lastTrailCreateTime(0)
+    lastTrailCreateTime(0),
+    breathingPhase(0.0f),
+    breathingSpeed(0.02f),      // Slow breathing cycle - adjust this for faster/slower breathing
+    minBrightness(0.4f),        // 40% minimum brightness
+    maxBrightness(1.0f)         // 100% maximum brightness
 {
     // Initialize trails vector
     trails.reserve(MAX_TRAILS);
 
-    Serial.println("CoreGrowEffect created - core grows + anti-wave staggered trails");
+    Serial.println("CoreGrowEffect created - core grows + breathing trails");
 }
 
 void CoreGrowEffect::reset() {
@@ -34,6 +38,12 @@ void CoreGrowEffect::reset() {
 void CoreGrowEffect::update() {
     // Clear all strips first
     leds.clearAll();
+
+    // Update breathing phase for trails
+    breathingPhase += breathingSpeed;
+    if (breathingPhase > 2.0f * PI) {
+        breathingPhase -= 2.0f * PI;  // Keep phase in 0 to 2*PI range
+    }
 
     unsigned long currentTime = millis();
 
@@ -167,6 +177,18 @@ void CoreGrowEffect::update() {
     leds.showAll();
 }
 
+float CoreGrowEffect::calculateBreathingBrightness() {
+    // Use sine wave to create smooth breathing effect
+    // sin() returns -1 to 1, we want to map this to minBrightness to maxBrightness
+    float sineValue = sin(breathingPhase);  // -1.0 to 1.0
+
+    // Convert from -1,1 range to 0,1 range
+    float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
+
+    // Map to our desired brightness range (40% to 100%)
+    return minBrightness + (normalizedSine * (maxBrightness - minBrightness));
+}
+
 void CoreGrowEffect::createNewTrail() {
     // Don't create more trails if we're at maximum
     if (trails.size() >= MAX_TRAILS) {
@@ -195,11 +217,11 @@ void CoreGrowEffect::createNewTrail() {
         newTrail.position = 0 - TRAIL_LENGTH; // Start with entire trail below the strip
     }
 
-    // Random speed with more variation to prevent synchronized movement
-    float baseSpeed = 0.14f + (random(100) / 100.0f) * 0.56f; // 0.14 to 0.7 (30% slower: 0.2-1.0 * 0.7)
+    // Random speed with less variation to keep trails slower and more consistent
+    float baseSpeed = 0.14f + (random(100) / 100.0f) * 0.16f; // 0.14 to 0.30 (much smaller range)
 
-    // Add extra randomness to speed to prevent trails from moving in sync
-    float speedVariance = (random(100) / 100.0f) * 0.1f - 0.05f; // ±0.05 variance
+    // Add minimal randomness to speed to prevent trails from moving in sync
+    float speedVariance = (random(100) / 100.0f) * 0.03f - 0.015f; // ±0.015 variance (much smaller)
     newTrail.speed = baseSpeed + speedVariance;
     newTrail.active = true;
 
@@ -242,6 +264,9 @@ void CoreGrowEffect::updateTrails() {
 }
 
 void CoreGrowEffect::drawTrails() {
+    // Calculate the current breathing brightness multiplier for all trails
+    float breathingMultiplier = calculateBreathingBrightness();
+
     for (const auto& trail : trails) {
         if (!trail.active) continue;
 
@@ -268,6 +293,9 @@ void CoreGrowEffect::drawTrails() {
             float brightness = 1.0f - ((float)i / TRAIL_LENGTH);
             brightness = brightness * brightness; // Square the brightness for more dramatic fade
 
+            // Apply breathing effect to the brightness
+            brightness *= breathingMultiplier;
+
             // Physical position calculation
             int physicalPos = leds.mapPositionToPhysical(trail.stripType, pixelPos, trail.subStrip);
 
@@ -280,13 +308,26 @@ void CoreGrowEffect::drawTrails() {
                 physicalPos += trail.subStrip * OUTER_LEDS_PER_STRIP;
             }
 
-            // Set color
+            // Set color with gradual white-to-red transition
             CRGB color;
-            if (i == 0) {
-                // Head pixel: bright white
-                color = CRGB(255, 255, 255);
+            if (i < 10) {
+                // First 10 pixels: gradual transition from pure white to pure red
+                float whiteToRedRatio = (float)i / 9.0f; // 0.0 at head (i=0) to 1.0 at position 9
+
+                // Apply breathing effect to the brightness
+                float adjustedBrightness = brightness * breathingMultiplier;
+
+                // More dramatic fade - use exponential curve for faster fade-out
+                float fadeAmount = whiteToRedRatio * whiteToRedRatio; // Square the ratio for more dramatic fade
+
+                // Interpolate between pure white and pure red
+                uint8_t redValue = 255 * adjustedBrightness; // Red is always at full intensity
+                uint8_t greenValue = 255 * (1.0f - fadeAmount) * adjustedBrightness; // Green fades out dramatically
+                uint8_t blueValue = 255 * (1.0f - fadeAmount) * adjustedBrightness;  // Blue fades out dramatically
+
+                color = CRGB(redValue, greenValue, blueValue);
             } else {
-                // Trail pixels: red fading to black with more dramatic fade
+                // Rest of trail: pure red fading to black with breathing effect
                 uint8_t redValue = 255 * brightness;
                 color = CRGB(redValue, 0, 0);
             }

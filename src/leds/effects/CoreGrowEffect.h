@@ -18,13 +18,14 @@ struct CoreTrail {
 
 /**
  * CoreGrowEffect - Effect that grows red LEDs from center, then splits and moves outward,
- * plus trails on inner and outer strips
+ * plus trails on inner and outer strips with breathing brightness
  *
  * Features:
  * - Core: Phase 1: Grows from 1 to 25 LEDs from center with brightness fade
  * - Core: Phase 2: Pattern duplicates and both copies move in opposite directions
  * - Outer strips: Random red trails (15 LEDs) shooting upward, white leading LED
  * - Inner strips: Random red trails (15 LEDs) shooting downward, white leading LED
+ * - Trails: Breathing effect that fades from 40% to 100% brightness
  * - All other strips remain off
  */
 class CoreGrowEffect : public Effect {
@@ -63,6 +64,12 @@ private:
     int rightPosition;                  // Center position of right-moving pattern
     unsigned long lastUpdateTime;       // Last time we updated the animation
 
+    // Breathing effect variables for trails
+    float breathingPhase;               // Current phase of breathing cycle (0.0 to 2*PI)
+    float breathingSpeed;               // Speed of breathing cycle
+    float minBrightness;                // Minimum brightness (40%)
+    float maxBrightness;                // Maximum brightness (100%)
+
     // Timing constants for core effect
     static const int MAX_SIZE = 12;         // Maximum LEDs on each side of center (total 25 = 12+1+12)
     static const int GROW_INTERVAL = 100;   // Milliseconds between each growth step (slower for smoother appearance)
@@ -70,7 +77,7 @@ private:
 
     // Trail constants
     static const int MAX_TRAILS = 24;       // Maximum number of trails at once (doubled from 12)
-    static const int TRAIL_LENGTH = 26;     // Length of each trail in LEDs (30% longer: 20 * 1.3 = 26)
+    static const int TRAIL_LENGTH = 52;     // Length of each trail in LEDs (doubled from 26)
     static const int TARGET_TRAILS = 16;    // Target number of trails to maintain (doubled from 8)
 
     // Trail timing
@@ -80,6 +87,12 @@ private:
 
     // Trail management
     std::vector<CoreTrail> trails;          // Collection of all trails
+
+    /**
+     * Calculate the current breathing brightness multiplier
+     * @return Brightness multiplier between minBrightness and maxBrightness
+     */
+    float calculateBreathingBrightness();
 
     /**
      * Create a new trail on a random strip
@@ -92,7 +105,7 @@ private:
     void updateTrails();
 
     /**
-     * Draw all active trails
+     * Draw all active trails (with breathing brightness applied)
      */
     void drawTrails();
 
