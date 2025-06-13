@@ -463,24 +463,56 @@ void CoreGrowEffect::drawTrails() {
                 physicalPos += trail.subStrip * OUTER_LEDS_PER_STRIP;
             }
 
-            // Set color with gradual white-to-red transition
+            // Set color with extended white-to-red blending (16 pixels total)
             CRGB color;
-            if (i < 10) {
-                // First 10 pixels: gradual transition from pure white to pure red
-                float whiteToRedRatio = (float)i / 9.0f; // 0.0 at head (i=0) to 1.0 at position 9
-
-                // Apply breathing effect to the brightness
-                float adjustedBrightness = brightness * breathingMultiplier;
-
-                // More dramatic fade - use exponential curve for faster fade-out
-                float fadeAmount = whiteToRedRatio * whiteToRedRatio; // Square the ratio for more dramatic fade
-
-                // Interpolate between pure white and pure red
-                uint8_t redValue = 255 * adjustedBrightness; // Red is always at full intensity
-                uint8_t greenValue = 255 * (1.0f - fadeAmount) * adjustedBrightness; // Green fades out dramatically
-                uint8_t blueValue = 255 * (1.0f - fadeAmount) * adjustedBrightness;  // Blue fades out dramatically
-
-                color = CRGB(redValue, greenValue, blueValue);
+            if (i == 0) {
+                // LED 0: Pure bright white
+                color = CRGB(255 * brightness, 255 * brightness, 255 * brightness);
+            } else if (i == 1) {
+                // LED 1: Almost white
+                color = CRGB(255 * brightness, 240 * brightness, 240 * brightness);
+            } else if (i == 2) {
+                // LED 2: Very light pink
+                color = CRGB(255 * brightness, 225 * brightness, 225 * brightness);
+            } else if (i == 3) {
+                // LED 3: Light pink
+                color = CRGB(255 * brightness, 210 * brightness, 210 * brightness);
+            } else if (i == 4) {
+                // LED 4: Light pink
+                color = CRGB(255 * brightness, 190 * brightness, 190 * brightness);
+            } else if (i == 5) {
+                // LED 5: Medium-light pink
+                color = CRGB(255 * brightness, 170 * brightness, 170 * brightness);
+            } else if (i == 6) {
+                // LED 6: Medium-light pink
+                color = CRGB(255 * brightness, 150 * brightness, 150 * brightness);
+            } else if (i == 7) {
+                // LED 7: Medium pink
+                color = CRGB(255 * brightness, 130 * brightness, 130 * brightness);
+            } else if (i == 8) {
+                // LED 8: Medium pink
+                color = CRGB(255 * brightness, 110 * brightness, 110 * brightness);
+            } else if (i == 9) {
+                // LED 9: Medium-dark pink
+                color = CRGB(255 * brightness, 90 * brightness, 90 * brightness);
+            } else if (i == 10) {
+                // LED 10: Medium-dark pink
+                color = CRGB(255 * brightness, 75 * brightness, 75 * brightness);
+            } else if (i == 11) {
+                // LED 11: Dark pink
+                color = CRGB(255 * brightness, 60 * brightness, 60 * brightness);
+            } else if (i == 12) {
+                // LED 12: Dark pink
+                color = CRGB(255 * brightness, 45 * brightness, 45 * brightness);
+            } else if (i == 13) {
+                // LED 13: Very dark pink
+                color = CRGB(255 * brightness, 30 * brightness, 30 * brightness);
+            } else if (i == 14) {
+                // LED 14: Very dark pink/red
+                color = CRGB(255 * brightness, 20 * brightness, 20 * brightness);
+            } else if (i == 15) {
+                // LED 15: Almost red
+                color = CRGB(255 * brightness, 10 * brightness, 10 * brightness);
             } else {
                 // Rest of trail: pure red fading to black with breathing effect
                 uint8_t redValue = 255 * brightness;
