@@ -27,9 +27,10 @@ struct FutureTrail {
  * - Trails with electric blue tip and white tail that fades to black
  * - Trails randomly appear and move upward with acceleration
  * - Core strip breathes electric blue from 0% to 100% brightness
- * - Inner strips have blue breathing overlay at 0% to 50% brightness
- * - Breathing effects are synchronized between core and inner strips
- * - Both core and inner strips have shimmering effect
+ * - Inner strips have unpredictable blue breathing overlay at 10% to 80% brightness
+ * - Outer strips have unpredictable blue breathing overlay at 10% to 80% brightness
+ * - Breathing effects use random variations for unpredictable patterns
+ * - Both core and inner/outer strips have shimmering effect
  */
 class FutureEffect : public Effect {
 public:
@@ -87,13 +88,24 @@ private:
     // Timing
     unsigned long lastUpdateTime;
 
-    // Breathing effect variables
+    // Core breathing effect variables (predictable)
     float breathingPhase;               // Current phase of breathing cycle (0.0 to 2*PI)
     static constexpr float BREATHING_SPEED = 0.005f;  // Speed of breathing cycle (slowed by 4x from 0.02f)
+
+    // Unpredictable breathing effect variables for inner/outer strips
+    float unpredictableBreathingPhase;  // Current phase for unpredictable breathing
+    float unpredictableBreathingSpeed;  // Current speed (changes randomly)
+    float unpredictableBreathingTarget; // Target brightness we're moving towards
+    float unpredictableBreathingCurrent;// Current actual brightness
+    unsigned long lastBreathingChange;  // When we last changed breathing parameters
+    static constexpr float MIN_BREATHING_SPEED = 0.002f;  // Minimum breathing speed
+    static constexpr float MAX_BREATHING_SPEED = 0.02f;   // Maximum breathing speed
+    static constexpr unsigned long BREATHING_CHANGE_INTERVAL = 2000; // Change every 2 seconds
 
     // Shimmer effect variables for core and inner strips
     float* coreShimmerValues;           // Array to store shimmer brightness multipliers for core
     float* innerShimmerValues;          // Array to store shimmer brightness multipliers for inner strips
+    float* outerShimmerValues;          // Array to store shimmer brightness multipliers for outer strips
     unsigned long lastShimmerUpdate;    // When shimmer was last updated
     static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 100;  // Update shimmer every 100ms (slowed by 2x from 50ms)
 
@@ -123,16 +135,23 @@ private:
     int getStripLength(int stripType);
 
     /**
-     * Apply breathing effect to core and inner strips
-     * Core breathes 0-100%, inner breathes 0-50%
+     * Apply breathing effect to core and inner/outer strips
+     * Core breathes 0-100% predictably
+     * Inner/outer breathe 10-80% unpredictably
      */
     void applyBreathingEffect();
 
     /**
-     * Update shimmer effect for core and inner LEDs
+     * Update shimmer effect for core, inner, and outer LEDs
      * Creates random brightness variations for dazzling effect
      */
     void updateShimmer();
+
+    /**
+     * Update the unpredictable breathing parameters
+     * Changes speed and target brightness randomly
+     */
+    void updateUnpredictableBreathing();
 };
 
 #endif // FUTURE_EFFECT_H

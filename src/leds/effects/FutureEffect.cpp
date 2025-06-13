@@ -6,6 +6,11 @@ FutureEffect::FutureEffect(LEDController& ledController) :
     Effect(ledController),
     lastUpdateTime(0),
     breathingPhase(0.0f),
+    unpredictableBreathingPhase(0.0f),
+    unpredictableBreathingSpeed(0.01f),
+    unpredictableBreathingTarget(0.45f), // Start at middle of range
+    unpredictableBreathingCurrent(0.45f),
+    lastBreathingChange(0),
     lastShimmerUpdate(0)
 {
     // Reserve space for trails to avoid memory reallocations
@@ -27,6 +32,9 @@ FutureEffect::FutureEffect(LEDController& ledController) :
     // Allocate memory for inner shimmer values
     innerShimmerValues = new float[LED_STRIP_INNER_COUNT];
 
+    // Allocate memory for outer shimmer values
+    outerShimmerValues = new float[LED_STRIP_OUTER_COUNT];
+
     // Initialize all shimmer values to 1.0 (no effect initially)
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
         coreShimmerValues[i] = 1.0f;
@@ -37,7 +45,12 @@ FutureEffect::FutureEffect(LEDController& ledController) :
         innerShimmerValues[i] = 1.0f;
     }
 
-    Serial.println("FutureEffect initialized - upward accelerating trails with shimmering breathing core and inner");
+    // Initialize outer shimmer values
+    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+        outerShimmerValues[i] = 1.0f;
+    }
+
+    Serial.println("FutureEffect initialized - trails with shimmering core and unpredictable inner/outer breathing");
 }
 
 FutureEffect::~FutureEffect() {
@@ -48,6 +61,9 @@ FutureEffect::~FutureEffect() {
     if (innerShimmerValues) {
         delete[] innerShimmerValues;
     }
+    if (outerShimmerValues) {
+        delete[] outerShimmerValues;
+    }
     // Vector automatically cleans up when destroyed
 }
 
@@ -57,8 +73,12 @@ void FutureEffect::reset() {
         trail.isActive = false;
     }
 
-    // Reset breathing phase
+    // Reset breathing phases
     breathingPhase = 0.0f;
+    unpredictableBreathingPhase = 0.0f;
+    unpredictableBreathingCurrent = 0.45f;
+    unpredictableBreathingTarget = 0.45f;
+    lastBreathingChange = millis();
 
     // Reset shimmer values
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
@@ -68,6 +88,11 @@ void FutureEffect::reset() {
     // Reset inner shimmer values
     for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
         innerShimmerValues[i] = 1.0f;
+    }
+
+    // Reset outer shimmer values
+    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+        outerShimmerValues[i] = 1.0f;
     }
 
     Serial.println("FutureEffect reset - all trails cleared");
@@ -82,11 +107,14 @@ void FutureEffect::update() {
     // Clear all strips first
     leds.clearAll();
 
-    // Update breathing phase
+    // Update breathing phase for core (predictable)
     breathingPhase += BREATHING_SPEED;
     if (breathingPhase > 2.0f * PI) {
         breathingPhase -= 2.0f * PI;  // Keep phase in 0 to 2*PI range
     }
+
+    // Update unpredictable breathing parameters
+    updateUnpredictableBreathing();
 
     // Randomly create new trails
     if (random(100) < TRAIL_CREATE_CHANCE) {
@@ -104,6 +132,61 @@ void FutureEffect::update() {
 
     // Show all the changes
     leds.showAll();
+}
+
+void FutureEffect::updateUnpredictableBreathing() {
+    unsigned long currentTime = millis();
+
+    // Randomly change breathing parameters every few seconds
+    if (currentTime - lastBreathingChange > BREATHING_CHANGE_INTERVAL) {
+        lastBreathingChange = currentTime;
+
+        // Randomly change breathing speed
+        unpredictableBreathingSpeed = MIN_BREATHING_SPEED +
+            (random(100) / 100.0f) * (MAX_BREATHING_SPEED - MIN_BREATHING_SPEED);
+
+        // Randomly set a new target brightness (10% to 80%)
+        unpredictableBreathingTarget = 0.1f + (random(71) / 100.0f); // 0.1 to 0.8
+
+        // Occasionally add a "glitch" - sudden jump to random brightness
+        if (random(100) < 20) { // 20% chance of glitch
+            unpredictableBreathingCurrent = 0.1f + (random(71) / 100.0f);
+        }
+    }
+
+    // Update breathing phase with current speed
+    unpredictableBreathingPhase += unpredictableBreathingSpeed;
+    if (unpredictableBreathingPhase > 2.0f * PI) {
+        unpredictableBreathingPhase -= 2.0f * PI;
+    }
+
+    // Calculate base sine wave
+    float sineValue = sin(unpredictableBreathingPhase);
+    float normalizedSine = (sineValue + 1.0f) / 2.0f; // 0.0 to 1.0
+
+    // Mix sine wave with target for more unpredictable movement
+    float targetInfluence = 0.3f; // How much the target affects the brightness
+    float sineInfluence = 0.7f;   // How much the sine wave affects the brightness
+
+    float desiredBrightness = (unpredictableBreathingTarget * targetInfluence) +
+                              ((0.1f + normalizedSine * 0.7f) * sineInfluence);
+
+    // Smooth transition to desired brightness
+    float transitionSpeed = 0.05f;
+    if (unpredictableBreathingCurrent < desiredBrightness) {
+        unpredictableBreathingCurrent += transitionSpeed;
+        if (unpredictableBreathingCurrent > desiredBrightness) {
+            unpredictableBreathingCurrent = desiredBrightness;
+        }
+    } else if (unpredictableBreathingCurrent > desiredBrightness) {
+        unpredictableBreathingCurrent -= transitionSpeed;
+        if (unpredictableBreathingCurrent < desiredBrightness) {
+            unpredictableBreathingCurrent = desiredBrightness;
+        }
+    }
+
+    // Clamp to valid range (10% to 80%)
+    unpredictableBreathingCurrent = max(0.1f, min(0.8f, unpredictableBreathingCurrent));
 }
 
 void FutureEffect::createNewTrail() {
@@ -303,10 +386,10 @@ int FutureEffect::getStripLength(int stripType) {
 }
 
 void FutureEffect::applyBreathingEffect() {
-    // Update shimmer effect for both core and inner
+    // Update shimmer effect for all strips
     updateShimmer();
 
-    // Calculate breathing intensity using sine wave
+    // Calculate core breathing intensity using sine wave (predictable)
     float sineValue = sin(breathingPhase);      // -1.0 to 1.0
     float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
 
@@ -333,17 +416,17 @@ void FutureEffect::applyBreathingEffect() {
         leds.getCore()[i] = coreColor;
     }
 
-    // Apply breathing overlay to inner strips (0% to 50%) with shimmer
-    float baseInnerIntensity = normalizedSine * 0.5f;  // Max 50% brightness
+    // Apply unpredictable breathing overlay to inner strips (10% to 80%)
+    float innerOuterIntensity = unpredictableBreathingCurrent;
 
     // Add breathing overlay with shimmer to all inner strip LEDs
     for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
         // Apply shimmer multiplier to inner strips too
         float shimmerMultiplier = innerShimmerValues[i];
-        float finalIntensity = baseInnerIntensity * shimmerMultiplier;
+        float finalIntensity = innerOuterIntensity * shimmerMultiplier;
 
-        // Ensure we don't exceed 50% maximum for inner overlay
-        finalIntensity = min(0.5f, finalIntensity);
+        // Ensure we don't exceed 80% maximum
+        finalIntensity = min(0.8f, finalIntensity);
 
         CRGB innerOverlay = CRGB(
             blueR * finalIntensity,
@@ -356,6 +439,35 @@ void FutureEffect::applyBreathingEffect() {
 
         // Apply same brightness limiting as trails to prevent oversaturation
         CRGB& pixel = leds.getInner()[i];
+        uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
+        if (maxComponent > 240) {
+            float scale = 240.0f / maxComponent;
+            pixel.r = pixel.r * scale;
+            pixel.g = pixel.g * scale;
+            pixel.b = pixel.b * scale;
+        }
+    }
+
+    // Add breathing overlay with shimmer to all outer strip LEDs
+    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+        // Apply shimmer multiplier to outer strips
+        float shimmerMultiplier = outerShimmerValues[i];
+        float finalIntensity = innerOuterIntensity * shimmerMultiplier;
+
+        // Ensure we don't exceed 80% maximum
+        finalIntensity = min(0.8f, finalIntensity);
+
+        CRGB outerOverlay = CRGB(
+            blueR * finalIntensity,
+            blueG * finalIntensity,
+            blueB * finalIntensity
+        );
+
+        // Add the breathing color to existing color
+        leds.getOuter()[i] += outerOverlay;
+
+        // Apply same brightness limiting as trails to prevent oversaturation
+        CRGB& pixel = leds.getOuter()[i];
         uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
         if (maxComponent > 240) {
             float scale = 240.0f / maxComponent;
@@ -419,6 +531,29 @@ void FutureEffect::updateShimmer() {
             } else if (innerShimmerValues[i] > 1.0f) {
                 innerShimmerValues[i] -= 0.1f;  // Fade down
                 if (innerShimmerValues[i] < 1.0f) innerShimmerValues[i] = 1.0f;
+            }
+        }
+    }
+
+    // Update shimmer values for each outer LED
+    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+        // Same shimmer behavior as core but for outer strips
+        if (random(100) < 50) {  // 50% chance per frame for each LED to change
+            // Create shimmer effect with values between 0.4 and 1.6
+            outerShimmerValues[i] = 0.4f + (random(120) / 100.0f);  // 0.4 to 1.6
+
+            // Occasionally create super bright flashes (10% chance)
+            if (random(100) < 10) {
+                outerShimmerValues[i] = 1.8f + (random(40) / 100.0f);  // 1.8 to 2.2 for bright flashes
+            }
+        } else {
+            // Return to normal brightness
+            if (outerShimmerValues[i] < 1.0f) {
+                outerShimmerValues[i] += 0.1f;  // Fade up
+                if (outerShimmerValues[i] > 1.0f) outerShimmerValues[i] = 1.0f;
+            } else if (outerShimmerValues[i] > 1.0f) {
+                outerShimmerValues[i] -= 0.1f;  // Fade down
+                if (outerShimmerValues[i] < 1.0f) outerShimmerValues[i] = 1.0f;
             }
         }
     }
