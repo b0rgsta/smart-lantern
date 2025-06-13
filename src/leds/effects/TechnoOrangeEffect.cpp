@@ -74,8 +74,17 @@ void TechnoOrangeEffect::updateInnerAnimation() {
     switch (innerState) {
         case FILLING_UP:
         {
-            // Calculate precise fill position using float for smoother animation
-            float precisePosition = (float(elapsedTime) * INNER_LEDS_PER_STRIP) / INNER_FILL_TIME;
+            // Calculate progress as a ratio (0.0 to 1.0)
+            float progressRatio = float(elapsedTime) / INNER_FILL_TIME;
+            progressRatio = min(1.0f, progressRatio); // Clamp to 1.0 max
+
+            // Apply ease-out cubic function for deceleration effect
+            // This starts fast and slows down as it approaches the end
+            // Formula: 1 - (1 - x)^3
+            float easedProgress = 1.0f - pow(1.0f - progressRatio, 3.0f);
+
+            // Calculate precise position based on eased progress
+            float precisePosition = easedProgress * INNER_LEDS_PER_STRIP;
 
             // Define fade length for smooth leading edge
             const int fadeLength = 8; // Number of LEDs to fade over at the leading edge
@@ -145,6 +154,7 @@ void TechnoOrangeEffect::updateInnerAnimation() {
             break;
 
         case FADING_OUT:
+        {
             // Calculate fade progress (1.0 = full brightness, 0.0 = completely faded)
             float fadeProgress = 1.0f - (float(elapsedTime) / INNER_FADE_TIME);
             fadeProgress = max(0.0f, fadeProgress); // Don't go below 0
@@ -179,6 +189,7 @@ void TechnoOrangeEffect::updateInnerAnimation() {
                 Serial.println("Inner strips: Fade complete, starting new cycle");
             }
             break;
+        }
     }
 }
 
@@ -237,66 +248,36 @@ void TechnoOrangeEffect::updateCoreAnimation() {
 
         case CORE_FILLING:
         {
-            // Calculate precise fill position using float for smoother animation
-            // Make core fill faster by giving it more time (3 seconds instead of 2)
-            float precisePosition = (float(elapsedTime) * LED_STRIP_CORE_COUNT) / (CORE_FILL_TIME * 1.5f);
+            // Core needs to fade in completely before inner strips start fading
+            // Inner fills for 2s, holds for 1s, then fades
+            // Core starts at 1s (50% of inner fill), so it has 2s before fade starts
+            // Use 1.5s for fade-in to ensure it completes with some margin
+            const unsigned long CORE_FADE_IN_TIME = 1500; // 1.5 seconds
 
-            // Define fade length for smooth leading edge
-            const int fadeLength = 12; // Longer fade for more visible effect on core
+            // Calculate fade-in progress (0.0 to 1.0)
+            float fadeInProgress = float(elapsedTime) / CORE_FADE_IN_TIME;
+            fadeInProgress = min(1.0f, fadeInProgress); // Clamp to 1.0 max
 
-            // Apply the fill to all core strip segments
-            int coreSegmentLength = LED_STRIP_CORE_COUNT / 3; // Core has 3 segments
+            // Apply smooth ease-in-out function for natural fade
+            // Using smoothstep: 3x^2 - 2x^3
+            float smoothProgress = fadeInProgress * fadeInProgress * (3.0f - 2.0f * fadeInProgress);
 
-            for (int segment = 0; segment < 3; segment++) {
-                for (int led = 0; led < coreSegmentLength; led++) {
-                    // Use LED mapping to get the correct physical position
-                    int physicalPos = leds.mapPositionToPhysical(0, led, segment);
-                    physicalPos += segment * coreSegmentLength; // Add segment offset
+            // Apply the fade-in to all core LEDs simultaneously
+            CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
 
-                    // Use the same logic as inner strips - simple position comparison
-                    if (led < precisePosition - fadeLength) {
-                        // LEDs below the fade zone: fully lit (purple color at 45% brightness with shimmer)
-                        CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
+            for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+                // Apply shimmer multiplier to create dazzling effect
+                float shimmerMultiplier = coreShimmerValues[i];
 
-                        // Apply shimmer multiplier to create dazzling effect
-                        float shimmerMultiplier = coreShimmerValues[physicalPos];
+                // Calculate color with fade-in progress, 45% max brightness, and shimmer
+                CRGB fadedColor = CRGB(
+                    baseColor.r * smoothProgress * 0.45f * shimmerMultiplier,
+                    baseColor.g * smoothProgress * 0.45f * shimmerMultiplier,
+                    baseColor.b * smoothProgress * 0.45f * shimmerMultiplier
+                );
 
-                        CRGB dimmedColor = CRGB(
-                            baseColor.r * 0.45f * shimmerMultiplier,
-                            baseColor.g * 0.45f * shimmerMultiplier,
-                            baseColor.b * 0.45f * shimmerMultiplier
-                        );
-                        leds.getCore()[physicalPos] = dimmedColor;
-                    } else if (led <= precisePosition) {
-                        // LEDs in the fade zone: gradually fade from full brightness to off
-                        float distanceFromEdge = precisePosition - led;
-                        float fadeProgress = distanceFromEdge / fadeLength;
-                        fadeProgress = max(0.0f, min(1.0f, fadeProgress));
-
-                        // Apply smooth curve for natural fade
-                        fadeProgress = sqrt(fadeProgress);
-
-                        // Apply shimmer to the fading edge too
-                        float shimmerMultiplier = coreShimmerValues[physicalPos];
-
-                        // Calculate faded purple color with shimmer
-                        CRGB baseColor = leds.neoColorToCRGB(CORE_PURPLE_COLOR);
-                        CRGB fadedColor = CRGB(
-                            baseColor.r * fadeProgress * 0.45f * shimmerMultiplier,
-                            baseColor.g * fadeProgress * 0.45f * shimmerMultiplier,
-                            baseColor.b * fadeProgress * 0.45f * shimmerMultiplier
-                        );
-
-                        leds.getCore()[physicalPos] = fadedColor;
-                    } else {
-                        // LEDs above the fade zone: completely off (black)
-                        leds.getCore()[physicalPos] = CRGB::Black;
-                    }
-                }
+                leds.getCore()[i] = fadedColor;
             }
-
-            // Update fill position for state checking
-            coreFillPosition = int(precisePosition);
 
             // Core filling doesn't complete on its own - it gets interrupted by fade
             break;

@@ -3,19 +3,17 @@
 #include "SmartLantern.h"
 
 #include "leds/effects/StartupEffect.h"
-#include "leds/effects/TrailsEffect.h"
 #include "leds/effects/RainbowEffect.h"
 #include "leds/effects/FireEffect.h"
 #include "leds/effects/MatrixEffect.h"
-#include "leds/effects/AcceleratingTrailsEffect.h"
-#include "leds/effects/SolidColorEffect.h"
 #include "leds/effects/GradientEffect.h"
-#include "leds/effects/PartyRippleEffect.h"
 #include "leds/effects/WaterfallEffect.h"
 #include "leds/effects/CoreGrowEffect.h"
 #include "leds/effects/TechnoOrangeEffect.h"
 #include "leds/effects/RainbowTranceEffect.h"
 #include "leds/effects/PartyFireEffect.h"
+#include "leds/effects/TemperatureColorEffect.h"
+
 
 
 SmartLantern::SmartLantern() : isPowerOn(false),
@@ -56,8 +54,6 @@ SmartLantern::~SmartLantern() {
 
 void SmartLantern::initializeEffects() {
     // Create the effect instances
-    auto startupEffect = new StartupEffect(leds);
-    auto trailsEffect = new TrailsEffect(leds);
     // Create two rainbow effects with different parameters
     // First one: all strips enabled (for party mode)
     auto rainbowEffect = new RainbowEffect(leds);
@@ -71,8 +67,6 @@ void SmartLantern::initializeEffects() {
     );
     auto fireEffect = new FireEffect(leds);
     auto matrixEffect = new MatrixEffect(leds);
-    auto acceleratingTrailsEffect = new AcceleratingTrailsEffect(leds);
-    auto partyRippleEffect = new PartyRippleEffect(leds);
     auto waterfallEffect = new WaterfallEffect(leds);
     auto coreGrowEffect = new CoreGrowEffect(leds);
     auto technoOrangeEffect = new TechnoOrangeEffect(leds);
@@ -84,33 +78,36 @@ void SmartLantern::initializeEffects() {
     fireEffectPtr = fireEffect;
 
     // Solid color effects for ambient mode
-    auto coolWhiteEffect = new SolidColorEffect(
+    auto candleEffect = new TemperatureColorEffect(
+    leds,
+    1800,   // Candle light temperature
+    false,  // Core off
+    true,   // Inner on
+    true,   // Outer on (with fade)
+    false   // Ring off
+);
+
+    auto incandescent = new TemperatureColorEffect(
         leds,
-        SolidColorEffect::COLOR_NONE, // Core
-        SolidColorEffect::COLD_WHITE, // Inner (off)
-        SolidColorEffect::COLD_WHITE, // Outer (off)
-        SolidColorEffect::COLOR_NONE // Ring
+        2700,   // Warm incandescent
+        false,  // Core off
+        true,   // Inner on
+        true,   // Outer on (with fade)
+        false   // Ring off
     );
 
-    auto whiteEffect = new SolidColorEffect(
+    auto daylight = new TemperatureColorEffect(
         leds,
-        SolidColorEffect::COLOR_NONE, // Core
-        SolidColorEffect::NATURAL_WHITE, // Inner (off)
-        SolidColorEffect::NATURAL_WHITE, // Outer (off)
-        SolidColorEffect::COLOR_NONE // Ring
+        5500,   // Natural daylight
+        false,  // Core off
+        true,   // Inner on
+        true,   // Outer on (with fade)
+        false   // Ring off
     );
 
-    auto warmWhiteEffect = new SolidColorEffect(
-        leds,
-        SolidColorEffect::COLOR_NONE, // Core
-        SolidColorEffect::WARM_WHITE, // Inner (off)
-        SolidColorEffect::WARM_WHITE, // Outer (off)
-        SolidColorEffect::COLOR_NONE // Ring
-    );
-
-    effects[MODE_AMBIENT].push_back(coolWhiteEffect); // Cool white
-    effects[MODE_AMBIENT].push_back(whiteEffect); // Pure white
-    effects[MODE_AMBIENT].push_back(warmWhiteEffect); // Warm white
+    effects[MODE_AMBIENT].push_back(candleEffect);
+    effects[MODE_AMBIENT].push_back(incandescent);
+    effects[MODE_AMBIENT].push_back(daylight);
 
     // Gradient effects for gradient mode
     // 1. Purple-Blue opposing gradients (inner purple→blue, outer blue→purple, others off)
@@ -169,17 +166,17 @@ void SmartLantern::initializeEffects() {
     // MODE_ANIMATED
     effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
     effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
-    effects[MODE_ANIMATED].push_back(matrixEffect); // Matrix effect
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
 
 
     // MODE_PARTY
-    effects[MODE_PARTY].push_back(rainbowEffect); // Rainbow
     effects[MODE_PARTY].push_back(coreGrowEffect); // Core ripple
     effects[MODE_PARTY].push_back(matrixEffect); // Matrix
     effects[MODE_PARTY].push_back(technoOrangeEffect);
     effects[MODE_PARTY].push_back(rainbowTranceEffect); // Rainbow Trance
     effects[MODE_PARTY].push_back(partyFireEffect); // Party Fire
+    effects[MODE_PARTY].push_back(rainbowEffect); // Rainbow
+
 }
 
 void SmartLantern::begin() {
