@@ -14,6 +14,8 @@
 #include "leds/effects/WaterfallEffect.h"
 #include "leds/effects/CoreGrowEffect.h"
 #include "leds/effects/TechnoOrangeEffect.h"
+#include "leds/effects/RainbowTranceEffect.h"
+
 
 SmartLantern::SmartLantern() : isPowerOn(false),
                                isAutoOn(false),
@@ -61,6 +63,8 @@ void SmartLantern::initializeEffects() {
     auto waterfallEffect = new WaterfallEffect(leds);
     auto coreGrowEffect = new CoreGrowEffect(leds);
     auto technoOrangeEffect = new TechnoOrangeEffect(leds);
+    auto rainbowTranceEffect = new RainbowTranceEffect(leds);
+
 
 
 
@@ -169,6 +173,8 @@ void SmartLantern::initializeEffects() {
     effects[MODE_PARTY].push_back(acceleratingTrailsEffect); // Accelerating trails
     effects[MODE_PARTY].push_back(partyRippleEffect); // Party ripple
     effects[MODE_PARTY].push_back(technoOrangeEffect);
+    effects[MODE_PARTY].push_back(rainbowTranceEffect); // Rainbow Trance
+
 }
 
 void SmartLantern::begin() {
