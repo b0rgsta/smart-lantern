@@ -8,7 +8,8 @@ RgbPatternEffect::RgbPatternEffect(LEDController& ledController) :
     ringScrollPosition(0.0f),
     sizePhase(0.0f),
     lastUpdateTime(0),
-    outerBreathingPhase(0.0f)
+    outerBreathingPhase(0.0f),
+    innerBreathingPhase(0.0f)  // NEW: Initialize inner breathing phase
 {
     // Initialize without clearing LEDs as requested
     Serial.println("RgbPatternEffect created - Synchronized RGB patterns on all strips");
@@ -20,6 +21,7 @@ void RgbPatternEffect::reset() {
     ringScrollPosition = 0.0f;
     sizePhase = 0.0f;
     outerBreathingPhase = 0.0f;
+    innerBreathingPhase = 0.0f;  // NEW: Reset inner breathing phase
     lastUpdateTime = millis();
 
     Serial.println("RgbPatternEffect reset - all patterns restarting");
@@ -34,7 +36,7 @@ void RgbPatternEffect::update() {
     // Clear all strips first
     leds.clearAll();
 
-    // Update scroll position for upward movement (core and inner)
+    // Update scroll position for upward movement (core only now)
     scrollPosition -= SCROLL_SPEED;
     if (scrollPosition < 0) {
         scrollPosition += PATTERN_LENGTH;
@@ -55,6 +57,12 @@ void RgbPatternEffect::update() {
     // Update outer breathing phase (synchronized with size phase)
     outerBreathingPhase = sizePhase;  // Keep in sync with dot size
 
+    // Update inner breathing phase
+    innerBreathingPhase += INNER_BREATHING_SPEED;
+    if (innerBreathingPhase > 6.0f * PI) {  // 3 complete cycles for R-G-B
+        innerBreathingPhase -= 6.0f * PI;
+    }
+
     // Draw effects on each strip type
 
     // Core: upward moving RGB dots
@@ -62,10 +70,8 @@ void RgbPatternEffect::update() {
         drawCoreSegment(segment);
     }
 
-    // Inner: same pattern as core (synchronized with UV mapping)
-    for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
-        drawInnerSegment(segment);
-    }
+    // Inner: NEW breathing RGB cycle
+    updateInnerBreathing();
 
     // Ring: rotating RGB pattern
     if (!skipRing) {
@@ -80,139 +86,116 @@ void RgbPatternEffect::update() {
 }
 
 int RgbPatternEffect::getCurrentDotSize() {
-    // Use sine wave to smoothly transition between BASE_DOT_SIZE and MAX_DOT_SIZE
-    float sineValue = sin(sizePhase);  // -1.0 to 1.0
+    // Use sine wave to smoothly transition between sizes
+    float sineValue = sin(sizePhase);
     float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
 
-    // Calculate dot size
-    int dotSize = BASE_DOT_SIZE + (int)(normalizedSine * (MAX_DOT_SIZE - BASE_DOT_SIZE));
-
-    return dotSize;
-}
-
-bool RgbPatternEffect::isColorDot(float position, int dotSize, int colorIndex) {
-    // Calculate where each color starts in the pattern
-    float colorStart = colorIndex * PATTERN_SPACING;
-
-    // Ensure position is within pattern bounds
-    position = fmod(position, PATTERN_LENGTH);
-    if (position < 0) position += PATTERN_LENGTH;
-
-    // Check if position falls within the dot for this color
-    float dotOffset = (MAX_DOT_SIZE - dotSize) / 2.0f;  // Center the dot
-    float dotStart = colorStart + dotOffset;
-    float dotEnd = dotStart + dotSize;
-
-    // Handle wrap-around at pattern boundaries
-    if (dotEnd > PATTERN_LENGTH) {
-        // Dot wraps around
-        return (position >= dotStart) || (position < (dotEnd - PATTERN_LENGTH));
-    }
-
-    return (position >= dotStart && position < dotEnd);
+    // Interpolate between BASE_DOT_SIZE and MAX_DOT_SIZE
+    int size = BASE_DOT_SIZE + (int)(normalizedSine * (MAX_DOT_SIZE - BASE_DOT_SIZE));
+    return size;
 }
 
 CRGB RgbPatternEffect::getColorAtPosition(float position, int dotSize) {
-    // Check each color to see if this position is part of a dot
-    if (isColorDot(position, dotSize, 0)) {
-        return CRGB::Red;
-    }
-    if (isColorDot(position, dotSize, 1)) {
-        return CRGB::Green;
-    }
-    if (isColorDot(position, dotSize, 2)) {
-        return CRGB::Blue;
+    // Normalize position to pattern length
+    float normalizedPos = fmod(position, PATTERN_LENGTH);
+
+    // Determine which color section we're in
+    int colorSection = (int)(normalizedPos / PATTERN_SPACING);
+    float posInSection = fmod(normalizedPos, PATTERN_SPACING);
+
+    // Check if we're within the dot size
+    if (posInSection < dotSize) {
+        // Return the appropriate color
+        switch (colorSection) {
+            case 0: return CRGB(255, 0, 0);    // Red
+            case 1: return CRGB(0, 255, 0);    // Green
+            case 2: return CRGB(0, 0, 255);    // Blue
+            default: return CRGB::Black;
+        }
     }
 
-    // Otherwise, this position is off (black)
-    return CRGB::Black;
+    return CRGB::Black;  // Gap between dots
 }
 
 float RgbPatternEffect::uvToPatternPosition(float uvPosition) {
-    // Map UV coordinate (0.0 to 1.0) to pattern position
-    // Account for scrolling
-    float patternPosition = (uvPosition * PATTERN_LENGTH) + scrollPosition;
-
-    // Wrap around pattern length
-    while (patternPosition >= PATTERN_LENGTH) {
-        patternPosition -= PATTERN_LENGTH;
-    }
-    while (patternPosition < 0) {
-        patternPosition += PATTERN_LENGTH;
-    }
-
-    return patternPosition;
+    // Map UV (0.0 to 1.0) to pattern position
+    // UV 0.0 = bottom of strip, UV 1.0 = top of strip
+    return uvPosition * CORE_LEDS_PER_SEGMENT;
 }
 
 CRGB RgbPatternEffect::getColorAtUV(float uvPosition, int dotSize) {
-    float patternPosition = uvToPatternPosition(uvPosition);
-    return getColorAtPosition(patternPosition, dotSize);
-}
-
-CRGB RgbPatternEffect::getIndexedColor(int colorIndex) {
-    switch (colorIndex) {
-        case 0: return CRGB::Red;
-        case 1: return CRGB::Green;
-        case 2: return CRGB::Blue;
-        default: return CRGB::Black;
-    }
+    float patternPos = uvToPatternPosition(uvPosition);
+    return getColorAtPosition(patternPos + scrollPosition, dotSize);
 }
 
 void RgbPatternEffect::drawCoreSegment(int segment) {
-    // Calculate the length of each core segment
-    int segmentLength = LED_STRIP_CORE_COUNT / 3;
-
     // Get current dot size
     int currentDotSize = getCurrentDotSize();
 
-    // Draw each LED in this segment
-    for (int i = 0; i < segmentLength; i++) {
-        // Calculate UV position (0.0 to 1.0) for this LED
-        float uvPosition = (float)i / (segmentLength - 1);
+    // Draw pattern on this segment
+    CRGB* segmentStart = leds.getCore() + (segment * CORE_LEDS_PER_SEGMENT);
 
-        // Get the color for this UV position
-        CRGB color = getColorAtUV(uvPosition, currentDotSize);
+    for (int i = 0; i < CORE_LEDS_PER_SEGMENT; i++) {
+        // Calculate UV position (0.0 at bottom, 1.0 at top)
+        float uvPos = (float)i / CORE_LEDS_PER_SEGMENT;
 
-        // Map logical position to physical position
-        int physicalPos = leds.mapPositionToPhysical(0, i, segment); // 0 = core strip
-        physicalPos += segment * segmentLength;
+        // Get color at this UV position
+        CRGB color = getColorAtUV(uvPos, currentDotSize);
 
-        // Make sure we're within bounds
-        if (physicalPos >= 0 && physicalPos < LED_STRIP_CORE_COUNT) {
-            leds.getCore()[physicalPos] = color;
-        }
+        // Set the LED color
+        segmentStart[i] = color;
     }
 }
 
-void RgbPatternEffect::drawInnerSegment(int segment) {
-    // Get current dot size
-    int currentDotSize = getCurrentDotSize();
+// NEW: Completely new implementation for inner strip breathing
+void RgbPatternEffect::updateInnerBreathing() {
+    // Determine which color phase we're in (0-2*PI for each color)
+    int colorPhase = (int)(innerBreathingPhase / (2.0f * PI));  // 0, 1, or 2
+    float phaseInColor = fmod(innerBreathingPhase, 2.0f * PI);  // 0 to 2*PI
 
-    // Draw each LED in this inner segment using UV mapping
-    for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
-        // Calculate UV position (0.0 to 1.0) for this LED
-        float uvPosition = (float)i / (INNER_LEDS_PER_STRIP - 1);
+    // Calculate breathing intensity using sine wave
+    float breathingIntensity = (sin(phaseInColor - PI/2) + 1.0f) / 2.0f;  // 0 to 1
 
-        // Get the color for this UV position (same as core)
-        CRGB color = getColorAtUV(uvPosition, currentDotSize);
+    // Scale between min and max brightness
+    float brightness = INNER_MIN_BRIGHTNESS +
+                      (breathingIntensity * (INNER_MAX_BRIGHTNESS - INNER_MIN_BRIGHTNESS));
 
-        // Calculate physical LED position
-        int physicalPos = segment * INNER_LEDS_PER_STRIP + i;
-
-        // Make sure we're within bounds
-        if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
-            leds.getInner()[physicalPos] = color;
-        }
+    // Determine which color to show based on phase
+    CRGB currentColor;
+    switch (colorPhase % 3) {  // Use modulo to wrap around
+        case 0:
+            currentColor = CRGB(255, 0, 0);  // Red
+            break;
+        case 1:
+            currentColor = CRGB(0, 255, 0);  // Green
+            break;
+        case 2:
+            currentColor = CRGB(0, 0, 255);  // Blue
+            break;
     }
+
+    // Apply brightness to the color
+    currentColor.nscale8(255 * brightness);
+
+    // Apply the same color to all inner strip LEDs
+    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
+        leds.getInner()[i] = currentColor;
+    }
+}
+
+// This method is no longer used for inner strips
+void RgbPatternEffect::drawInnerSegment(int segment) {
+    // REMOVED: Old synchronized pattern code
+    // Inner strips now use breathing RGB cycle instead
 }
 
 void RgbPatternEffect::drawRing() {
     // Get current dot size
     int currentDotSize = getCurrentDotSize();
 
-    // Draw each LED in the ring
+    // Draw rotating pattern on ring
     for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
-        // Map ring position to pattern position with continuous scrolling
+        // Map ring position to pattern space
         float ringPosition = (float)i / LED_STRIP_RING_COUNT * PATTERN_LENGTH;
         float patternPosition = fmod(ringPosition + ringScrollPosition, PATTERN_LENGTH);
 
@@ -265,5 +248,14 @@ void RgbPatternEffect::updateOuterWaves() {
             int physicalPos = segment * OUTER_LEDS_PER_STRIP + led;
             leds.getOuter()[physicalPos] = blendedColor;
         }
+    }
+}
+
+CRGB RgbPatternEffect::getIndexedColor(int colorIndex) {
+    switch (colorIndex % 3) {
+        case 0: return CRGB(255, 0, 0);    // Red
+        case 1: return CRGB(0, 255, 0);    // Green
+        case 2: return CRGB(0, 0, 255);    // Blue
+        default: return CRGB::Black;
     }
 }

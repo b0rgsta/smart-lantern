@@ -10,7 +10,7 @@
  *
  * Features:
  * - Core: RGB dots moving upward with size transitions
- * - Inner: Same RGB pattern as core (synchronized with UV mapping)
+ * - Inner: Breathing cycle through R->G->B colors (NEW!)
  * - Ring: RGB pattern rotating continuously
  * - Outer: RGB breathing waves synchronized with dot size
  *
@@ -49,89 +49,49 @@ private:
     static const int PATTERN_SPACING = MAX_DOT_SIZE + GAP_SIZE;  // Space for one color + gap (14)
     static const int PATTERN_LENGTH = PATTERN_SPACING * 3;       // Total pattern length (42)
 
-    // Core and inner animation variables (shared)
-    float scrollPosition;                    // Current scroll position (float for smooth movement)
-    float sizePhase;                        // Phase for size transition (0 to 2*PI)
-    unsigned long lastUpdateTime;           // Last time the animation was updated
+    // Core strip properties
+    static const int CORE_LEDS_PER_SEGMENT = 50;
 
-    // Ring-specific scroll position
-    float ringScrollPosition;               // Current scroll position for ring
+    // Note: The following are defined in Config.h:
+    // INNER_LEDS_PER_STRIP = 75
+    // NUM_INNER_STRIPS = 3
+    // OUTER_LEDS_PER_STRIP = 75
+    // NUM_OUTER_STRIPS = 3
+    // LED_STRIP_RING_COUNT (for ring)
 
-    // Animation speeds
-    static constexpr float SCROLL_SPEED = 0.15f;      // Speed of upward movement (LEDs per frame)
-    static constexpr float SIZE_SPEED = 0.02f;        // Speed of size transitions
-    static constexpr float RING_SCROLL_SPEED = 0.155f;// Ring rotation speed
+    // Animation speeds (REDUCED for slower animation)
+    static constexpr float SCROLL_SPEED = 0.3f;       // Core upward scroll speed (was 0.8f)
+    static constexpr float RING_SCROLL_SPEED = 0.3f;  // Ring rotation speed (reduced by 25% from 0.4f)
+    static constexpr float SIZE_SPEED = 0.008f;       // Dot size change speed (was 0.015f)
 
-    // Outer strip breathing wave variables
-    float outerBreathingPhase;                     // Current phase of breathing cycle
-    static constexpr float BREATHING_SPEED = 0.02f; // Same as SIZE_SPEED for synchronization
+    // NEW: Inner strip breathing constants
+    static constexpr float INNER_BREATHING_SPEED = 0.015f;  // Speed of breathing cycle (slower)
+    static constexpr float INNER_MIN_BRIGHTNESS = 0.0f;     // Minimum brightness (0% - full black)
+    static constexpr float INNER_MAX_BRIGHTNESS = 0.3f;     // Maximum brightness (50% - half brightness)
 
-    /**
-     * Calculate the current dot size based on the size phase
-     * @return Current dot size (between BASE_DOT_SIZE and MAX_DOT_SIZE)
-     */
+    // Animation state variables
+    float scrollPosition;          // Current scroll position for core/inner
+    float ringScrollPosition;      // Current scroll position for ring
+    float sizePhase;              // Phase for dot size animation
+    unsigned long lastUpdateTime;  // Last update timestamp
+    float outerBreathingPhase;    // Phase for outer strip breathing
+
+    // NEW: Inner strip breathing state
+    float innerBreathingPhase;     // Phase for inner strip breathing (0 to 9*PI for full RGB cycle with pauses)
+
+    // Helper methods
     int getCurrentDotSize();
-
-    /**
-     * Check if a position is part of a color dot
-     * @param position Position to check
-     * @param dotSize Current size of dots
-     * @param colorIndex Which color (0=red, 1=green, 2=blue)
-     * @return True if position is part of the specified color dot
-     */
-    bool isColorDot(float position, int dotSize, int colorIndex);
-
-    /**
-     * Get the color for a specific position
-     * @param position Position to check
-     * @param dotSize Current size of dots
-     * @return The color for that position (red, green, blue, or black)
-     */
     CRGB getColorAtPosition(float position, int dotSize);
-
-    /**
-     * Map a UV coordinate to pattern position
-     * @param uvPosition Position from 0.0 to 1.0 along the strip
-     * @return Pattern position that maps to this UV coordinate
-     */
     float uvToPatternPosition(float uvPosition);
-
-    /**
-     * Get color at a specific UV position
-     * @param uvPosition Position from 0.0 to 1.0 along the strip
-     * @param dotSize Current size of dots
-     * @return The color for that UV position
-     */
     CRGB getColorAtUV(float uvPosition, int dotSize);
-
-    /**
-     * Draw the pattern on a single core segment
-     * @param segment Which core segment to draw on (0, 1, or 2)
-     */
     void drawCoreSegment(int segment);
-
-    /**
-     * Draw the pattern on a single inner strip segment
-     * @param segment Which inner strip segment to draw on (0, 1, or 2)
-     */
     void drawInnerSegment(int segment);
-
-    /**
-     * Draw the pattern on the ring strip
-     */
     void drawRing();
-
-    /**
-     * Update and draw outer strip breathing waves
-     */
     void updateOuterWaves();
-
-    /**
-     * Get RGB color based on color index
-     * @param colorIndex 0=red, 1=green, 2=blue
-     * @return The corresponding RGB color
-     */
     CRGB getIndexedColor(int colorIndex);
+
+    // NEW: Helper method for inner strip breathing
+    void updateInnerBreathing();
 };
 
 #endif // RGB_PATTERN_EFFECT_H
