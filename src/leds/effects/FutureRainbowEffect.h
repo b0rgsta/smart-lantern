@@ -31,6 +31,7 @@ struct FutureRainbowTrail {
  * - Inner strips have unpredictable rainbow breathing overlay at 10% to 80% brightness
  * - Outer strips have unpredictable rainbow breathing with saturation cycling (100% to 30% over 4 seconds)
  * - All breathing effects use the same rainbow cycle timing
+ * - Ring has sparkly effect that breathes with core (20% to 100%) using gradient colors
  */
 class FutureRainbowEffect : public Effect {
 public:
@@ -115,6 +116,14 @@ private:
     unsigned long lastShimmerUpdate;    // When shimmer was last updated
     static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 100;  // Update shimmer every 100ms
 
+    // Ring sparkle effect variables
+    // Ring sparkle effect variables
+    float* ringSparkleValues;           // Array to store sparkle state for each ring LED (0.0 to 1.0)
+    unsigned long lastSparkleUpdate;    // When sparkles were last updated
+    static constexpr unsigned long SPARKLE_UPDATE_INTERVAL = 50;  // Update sparkles every 50ms
+    static constexpr float SPARKLE_CHANCE = 0.025f;              // 7.5% chance per LED per update to sparkle (reduced from 15%)
+    static constexpr float SPARKLE_DECAY = 0.05f;                // How quickly sparkles fade (multiplier per update)
+
     /**
      * Get current rainbow color based on the 30-second cycle
      * @return Current rainbow color as CRGB
@@ -163,6 +172,12 @@ private:
      * Creates random brightness variations for dazzling effect
      */
     void updateShimmer();
+
+    /**
+     * Update the sparkle effect for ring LEDs
+     * Creates random sparkles that fade over time
+     */
+    void updateRingSparkles();
 
     /**
      * Update the unpredictable breathing parameters

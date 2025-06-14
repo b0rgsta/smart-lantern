@@ -14,7 +14,8 @@ FutureRainbowEffect::FutureRainbowEffect(LEDController& ledController) :
     unpredictableBreathingTarget(0.55f),
     unpredictableBreathingCurrent(0.55f),
     lastBreathingChange(0),
-    lastShimmerUpdate(0)
+    lastShimmerUpdate(0),
+    lastSparkleUpdate(0)  // Initialize sparkle timing
 {
     // Reserve space for trails to avoid memory reallocations
     trails.reserve(MAX_TRAILS);
@@ -46,7 +47,15 @@ FutureRainbowEffect::FutureRainbowEffect(LEDController& ledController) :
         outerShimmerValues[i] = 1.0f;
     }
 
-    Serial.println("FutureRainbowEffect initialized - rainbow trails with saturation cycling");
+    // Allocate memory for ring sparkle values
+    ringSparkleValues = new float[LED_STRIP_RING_COUNT];
+
+    // Initialize all sparkle values to 0.0 (no sparkle initially)
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        ringSparkleValues[i] = 0.0f;
+    }
+
+    Serial.println("FutureRainbowEffect initialized - rainbow trails with saturation cycling and sparkly ring");
 }
 
 FutureRainbowEffect::~FutureRainbowEffect() {
@@ -59,6 +68,9 @@ FutureRainbowEffect::~FutureRainbowEffect() {
     }
     if (outerShimmerValues) {
         delete[] outerShimmerValues;
+    }
+    if (ringSparkleValues) {
+        delete[] ringSparkleValues;
     }
 }
 
@@ -87,6 +99,11 @@ void FutureRainbowEffect::reset() {
     }
     for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
         outerShimmerValues[i] = 1.0f;
+    }
+
+    // Reset ring sparkle values
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        ringSparkleValues[i] = 0.0f;
     }
 
     Serial.println("FutureRainbowEffect reset - all trails cleared");
@@ -318,12 +335,12 @@ void FutureRainbowEffect::applyBreathingEffect() {
     // Update shimmer effect for all strips
     updateShimmer();
 
+    // Calculate base hue for the gradient (0-255 range)
+    uint8_t baseHue = (uint8_t)(rainbowPhase * 255);
+
     // Calculate core breathing intensity using sine wave (predictable)
     float sineValue = sin(breathingPhase);
     float normalizedSine = (sineValue + 1.0f) / 2.0f; // 0.0 to 1.0
-
-    // Calculate base hue for the gradient (0-255 range)
-    uint8_t baseHue = (uint8_t)(rainbowPhase * 255);
 
     // Apply breathing with shimmer to core strip (0% to 100%) with gradient
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
@@ -445,6 +462,72 @@ void FutureRainbowEffect::applyBreathingEffect() {
             pixel.r = pixel.r * scale;
             pixel.g = pixel.g * scale;
             pixel.b = pixel.b * scale;
+        }
+    }
+
+    // Add sparkly breathing effect to ring strip
+    if (!skipRing) {
+        updateRingSparkles();
+
+        // Calculate core breathing intensity (10% to 100% for more dramatic effect)
+        float ringBreathingIntensity = 0.1f + (normalizedSine * 0.9f); // 10% to 100% (changed from 20-100%)
+
+        // Apply sparkles with random gradient colors to ring
+        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+            // Generate a random position in the gradient range for this LED
+            float randomPosition = (float)random(100) / 100.0f; // 0.0 to 1.0
+
+            // Calculate hue for this random position (matching the gradient pattern)
+            uint8_t hueOffset = (uint8_t)((1.0f - randomPosition) * 51); // 20% of 255, reversed
+            uint8_t pixelHue = baseHue + hueOffset;
+
+            // Create rainbow color for this pixel
+            CRGB rainbowColor = CHSV(pixelHue, 255, 255);
+
+            // Apply sparkle multiplier AND breathing intensity
+            float sparkleMultiplier = ringSparkleValues[i];
+
+            // Make sparkles affected by breathing - they sparkle within the breathing range
+            // When breathing is low, even sparkles are dim. When breathing is high, sparkles are bright
+            float finalIntensity = ringBreathingIntensity * (0.3f + sparkleMultiplier * 0.7f);
+            // This means: minimum 30% of breathing intensity, up to 100% when sparkling
+
+            // Apply the color with sparkle and breathing
+            CRGB ringColor = CRGB(
+                rainbowColor.r * finalIntensity,
+                rainbowColor.g * finalIntensity,
+                rainbowColor.b * finalIntensity
+            );
+
+            leds.getRing()[i] = ringColor;
+        }
+    }
+}
+
+void FutureRainbowEffect::updateRingSparkles() {
+    unsigned long currentTime = millis();
+
+    // Only update sparkles at specified intervals
+    if (currentTime - lastSparkleUpdate < SPARKLE_UPDATE_INTERVAL) {
+        return;
+    }
+
+    lastSparkleUpdate = currentTime;
+
+    // Update each LED's sparkle state
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        // Random chance to start a new sparkle (reduced chance)
+        if (ringSparkleValues[i] < 0.1f && random(1000) < (SPARKLE_CHANCE * 1000)) {
+            // Start a new sparkle at full sparkle value (not full brightness anymore)
+            ringSparkleValues[i] = 1.0f;
+        } else {
+            // Decay existing sparkle
+            ringSparkleValues[i] *= SPARKLE_DECAY;
+
+            // Ensure minimum threshold (consider fully faded below 0.01)
+            if (ringSparkleValues[i] < 0.01f) {
+                ringSparkleValues[i] = 0.0f;
+            }
         }
     }
 }
