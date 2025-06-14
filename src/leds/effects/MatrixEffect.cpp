@@ -7,7 +7,11 @@ MatrixEffect::MatrixEffect(LEDController &ledController) : Effect(ledController)
                                                            lastUpdate(0),
                                                            lastHueUpdate(0) {
     // Initialize drops for each strip
-    coreDrops.resize(MAX_DROPS_PER_STRIP);
+    // Core strips - 3 segments
+    for (int segment = 0; segment < 3; segment++) {
+        coreDrops[segment].resize(MAX_DROPS_PER_STRIP);
+    }
+
     ringDrops.resize(MAX_DROPS_PER_STRIP);
 
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
@@ -28,22 +32,25 @@ MatrixEffect::~MatrixEffect() {
 
 void MatrixEffect::reset() {
     // Reset all drops to inactive
-    for (auto &drop: coreDrops) {
-        drop.isActive = false;
+    // Update core drops reset to handle 3 segments
+    for (int segment = 0; segment < 3; segment++) {
+        for (auto& drop : coreDrops[segment]) {
+            drop.isActive = false;
+        }
     }
 
-    for (auto &drop: ringDrops) {
+    for (auto& drop : ringDrops) {
         drop.isActive = false;
     }
 
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
-        for (auto &drop: innerDrops[i]) {
+        for (auto& drop : innerDrops[i]) {
             drop.isActive = false;
         }
     }
 
     for (int i = 0; i < NUM_OUTER_STRIPS; i++) {
-        for (auto &drop: outerDrops[i]) {
+        for (auto& drop : outerDrops[i]) {
             drop.isActive = false;
         }
     }
@@ -79,8 +86,7 @@ void MatrixEffect::updateColorPalette() {
 
 void MatrixEffect::update() {
     // Target 120 FPS for ultra-smooth matrix drops
-    if (!shouldUpdate(8)) {
-        // 8ms = 125 FPS (close to 120)
+    if (!shouldUpdate(8)) {  // 8ms = 125 FPS (close to 120)
         return;
     }
 
@@ -88,7 +94,10 @@ void MatrixEffect::update() {
     leds.clearAll();
 
     // Update each strip type
-    updateStrip(0); // Core
+    // Core - now process each segment separately
+    for (int segment = 0; segment < 3; segment++) {
+        updateStrip(0, segment);
+    }
 
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
         updateStrip(1, i); // Inner strips
@@ -122,8 +131,8 @@ void MatrixEffect::createDrop(int stripType, int subStrip) {
     // Get the appropriate drops array based on strip type
     switch (stripType) {
         case 0: // Core
-            drops = &coreDrops;
-            stripLength = LED_STRIP_CORE_COUNT;
+            drops = &coreDrops[subStrip];  // Use segment-specific drops
+            stripLength = LED_STRIP_CORE_COUNT / 3;  // Each segment is 1/3 of total
             break;
         case 1: // Inner
             drops = &innerDrops[subStrip];
@@ -163,8 +172,8 @@ void MatrixEffect::updateStrip(int stripType, int subStrip) {
     // Get the appropriate drops array and strip length
     switch (stripType) {
         case 0: // Core
-            drops = &coreDrops;
-            stripLength = LED_STRIP_CORE_COUNT;
+            drops = &coreDrops[subStrip];  // Use segment-specific drops
+            stripLength = LED_STRIP_CORE_COUNT / 3;  // Each segment is 1/3 of total
             break;
         case 1: // Inner
             drops = &innerDrops[subStrip];
@@ -229,8 +238,12 @@ void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int strip
         // Map the logical position to physical LED
         int physicalPos = leds.mapPositionToPhysical(stripType, headPos, subStrip);
 
-        // For inner/outer strips, adjust for segment offset
-        if (stripType == 1) {
+        // For core strips, adjust for segment offset
+        if (stripType == 0) {
+            // Core
+            int segmentLength = LED_STRIP_CORE_COUNT / 3;
+            physicalPos += subStrip * segmentLength;
+        } else if (stripType == 1) {
             // Inner
             physicalPos += subStrip * INNER_LEDS_PER_STRIP;
         } else if (stripType == 2) {
@@ -272,12 +285,17 @@ void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int strip
     // Draw the trailing fade
     for (uint8_t i = 1; i <= TRAIL_LENGTH; i++) {
         int trailPos = headPos + i;
+
         if (trailPos >= 0 && trailPos < stripLength) {
             // Map to physical position
             int physicalPos = leds.mapPositionToPhysical(stripType, trailPos, subStrip);
 
-            // Adjust for segment offset for inner/outer strips
-            if (stripType == 1) {
+            // Adjust for segment offset
+            if (stripType == 0) {
+                // Core
+                int segmentLength = LED_STRIP_CORE_COUNT / 3;
+                physicalPos += subStrip * segmentLength;
+            } else if (stripType == 1) {
                 // Inner
                 physicalPos += subStrip * INNER_LEDS_PER_STRIP;
             } else if (stripType == 2) {

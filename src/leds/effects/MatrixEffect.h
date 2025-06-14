@@ -37,7 +37,7 @@ private:
     static const uint8_t HUE_ROTATION_SPEED = 1;       // Speed of hue rotation
 
     // Arrays to hold drops for each strip type
-    std::vector<Drop> coreDrops;
+    std::vector<Drop> coreDrops[3];  // Changed from single vector to array of 3
     std::vector<Drop> innerDrops[NUM_INNER_STRIPS];
     std::vector<Drop> outerDrops[NUM_OUTER_STRIPS];
     std::vector<Drop> ringDrops;
