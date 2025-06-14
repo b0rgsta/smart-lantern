@@ -8,14 +8,15 @@
 #include "leds/effects/MatrixEffect.h"
 #include "leds/effects/GradientEffect.h"
 #include "leds/effects/WaterfallEffect.h"
-#include "leds/effects/CoreGrowEffect.h"
-#include "leds/effects/TechnoOrangeEffect.h"
+#include "leds/effects/CodeRedEffect.h"
+#include "leds/effects/RegalEffect.h"
 #include "leds/effects/RainbowTranceEffect.h"
 #include "leds/effects/PartyFireEffect.h"
 #include "leds/effects/TemperatureColorEffect.h"
-#include "leds/effects/PartyRippleEffect.h"
+#include "leds/effects/AuraEffect.h"
 #include "leds/effects/FutureEffect.h"
 #include "leds/effects/FutureRainbowEffect.h"
+#include "leds/effects/RgbPatternEffect.h"
 
 
 
@@ -71,11 +72,17 @@ void SmartLantern::initializeEffects() {
     auto fireEffect = new FireEffect(leds);
     auto matrixEffect = new MatrixEffect(leds);
     auto waterfallEffect = new WaterfallEffect(leds);
-    auto coreGrowEffect = new CoreGrowEffect(leds);
-    auto technoOrangeEffect = new TechnoOrangeEffect(leds);
+    auto coreGrowEffect = new CodeRedEffect(leds);
+    auto technoOrangeEffect = new RegalEffect(leds);
     auto rainbowTranceEffect = new RainbowTranceEffect(leds);
     auto partyFireEffect = new PartyFireEffect(leds);
-    auto partyRippleEffect = new PartyRippleEffect(leds);
+    auto rgbPatternEffect = new RgbPatternEffect(leds);
+    auto partyRippleEffect = new AuraEffect(leds,
+        false,   // Core on
+        true,   // Inner on
+        true,   // Outer on
+        false    // Ring of
+    );
     auto futureEffect = new FutureEffect(leds);
     auto futureRainbowEffect = new FutureRainbowEffect(leds);
 
@@ -158,9 +165,9 @@ void SmartLantern::initializeEffects() {
     // 5. Christmas gradient on all strips
     auto christmasGradient = new GradientEffect(
         leds,
-        GradientEffect::createInnerChristmasGradient(),
-        Gradient(),
-        (GradientEffect::createOuterChristmasGradient()),
+        GradientEffect::createCoreChristmasGradient(),
+        GradientEffect::reverseGradient(GradientEffect::createOuterChristmasGradient()),
+        GradientEffect::createOuterChristmasGradient(),
         Gradient()
     );
 
@@ -186,6 +193,8 @@ void SmartLantern::initializeEffects() {
     effects[MODE_PARTY].push_back(rainbowEffect); // Rainbow
     effects[MODE_PARTY].push_back(futureEffect);
     effects[MODE_PARTY].push_back(futureRainbowEffect);
+    effects[MODE_PARTY].push_back(rgbPatternEffect); // Add the new RGB pattern effect
+
 
 }
 

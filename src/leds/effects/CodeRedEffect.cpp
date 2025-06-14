@@ -1,8 +1,8 @@
 // src/leds/effects/CoreGrowEffect.cpp
 
-#include "CoreGrowEffect.h"
+#include "CodeRedEffect.h"
 
-CoreGrowEffect::CoreGrowEffect(LEDController& ledController) :
+CodeRedEffect::CodeRedEffect(LEDController& ledController) :
     Effect(ledController),
     currentPhase(GROWING),
     currentSize(0),
@@ -23,7 +23,7 @@ CoreGrowEffect::CoreGrowEffect(LEDController& ledController) :
     Serial.println("CoreGrowEffect created - core grows + breathing trails + breathing ring trails");
 }
 
-void CoreGrowEffect::reset() {
+void CodeRedEffect::reset() {
     currentPhase = GROWING;
     currentSize = 0;
     leftPosition = 0;
@@ -39,7 +39,7 @@ void CoreGrowEffect::reset() {
     Serial.println("CoreGrowEffect reset to growing phase (trails continue)");
 }
 
-void CoreGrowEffect::update() {
+void CodeRedEffect::update() {
     // Clear all strips first
     leds.clearAll();
 
@@ -184,7 +184,7 @@ void CoreGrowEffect::update() {
     leds.showAll();
 }
 
-float CoreGrowEffect::calculateBreathingBrightness() {
+float CodeRedEffect::calculateBreathingBrightness() {
     // Use sine wave to create smooth breathing effect
     // sin() returns -1 to 1, we want to map this to minBrightness to maxBrightness
     float sineValue = sin(breathingPhase);  // -1.0 to 1.0
@@ -196,7 +196,7 @@ float CoreGrowEffect::calculateBreathingBrightness() {
     return minBrightness + (normalizedSine * (maxBrightness - minBrightness));
 }
 
-float CoreGrowEffect::calculateRingBreathingBrightness() {
+float CodeRedEffect::calculateRingBreathingBrightness() {
     // Use the same breathing phase as trails but with different brightness range
     // This keeps the ring synchronized with the trail breathing
     float sineValue = sin(breathingPhase);  // -1.0 to 1.0
@@ -208,7 +208,7 @@ float CoreGrowEffect::calculateRingBreathingBrightness() {
     return RING_MIN_BRIGHTNESS + (normalizedSine * (RING_MAX_BRIGHTNESS - RING_MIN_BRIGHTNESS));
 }
 
-void CoreGrowEffect::updateRingTrails() {
+void CodeRedEffect::updateRingTrails() {
     // Skip ring if button feedback is active (effect base class handles this)
     if (skipRing) {
         return;
@@ -266,7 +266,7 @@ void CoreGrowEffect::updateRingTrails() {
     drawRingTrails();
 }
 
-void CoreGrowEffect::createNewRingTrail() {
+void CodeRedEffect::createNewRingTrail() {
     // Don't create more ring trails if we're at maximum
     if (ringTrails.size() >= MAX_RING_TRAILS) {
         return;
@@ -297,7 +297,7 @@ void CoreGrowEffect::createNewRingTrail() {
     ringTrails.push_back(newTrail);
 }
 
-void CoreGrowEffect::drawRingTrails() {
+void CodeRedEffect::drawRingTrails() {
     // Clear the ring first
     for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
         leds.getRing()[i] = CRGB::Black;
@@ -344,7 +344,7 @@ void CoreGrowEffect::drawRingTrails() {
     }
 }
 
-void CoreGrowEffect::createNewTrail() {
+void CodeRedEffect::createNewTrail() {
     // Don't create more trails if we're at maximum
     if (trails.size() >= MAX_TRAILS) {
         return;
@@ -385,7 +385,7 @@ void CoreGrowEffect::createNewTrail() {
     trails.push_back(newTrail);
 }
 
-void CoreGrowEffect::updateTrails() {
+void CodeRedEffect::updateTrails() {
     // Update each trail
     for (auto& trail : trails) {
         if (!trail.active) continue;
@@ -419,7 +419,7 @@ void CoreGrowEffect::updateTrails() {
         trails.end());
 }
 
-void CoreGrowEffect::drawTrails() {
+void CodeRedEffect::drawTrails() {
     // Calculate the current breathing brightness multiplier for all trails
     float breathingMultiplier = calculateBreathingBrightness();
 
@@ -513,7 +513,7 @@ void CoreGrowEffect::drawTrails() {
     }
 }
 
-float CoreGrowEffect::calculateBrightness(int offset) {
+float CodeRedEffect::calculateBrightness(int offset) {
     // Create smooth fade from center (100%) to edges (15%)
     // Center = 100%, edges = 15% (more visible than 10%)
     float brightnessRange = 1.0f - 0.15f;  // 85% range to work with (100% to 15%)
@@ -523,7 +523,7 @@ float CoreGrowEffect::calculateBrightness(int offset) {
     return 1.0f - (distanceRatio * brightnessRange);
 }
 
-void CoreGrowEffect::drawPattern(int segment, int centerPos) {
+void CodeRedEffect::drawPattern(int segment, int centerPos) {
     int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
     int segmentStart = segment * coreSegmentLength;
     int segmentEnd = segmentStart + coreSegmentLength - 1;

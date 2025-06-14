@@ -1,30 +1,46 @@
-// src/leds/effects/PartyRippleEffect.cpp
+// src/leds/effects/AuraEffect.cpp
 
-#include "PartyRippleEffect.h"
+#include "AuraEffect.h"
 
-PartyRippleEffect::PartyRippleEffect(LEDController& ledController) :
+AuraEffect::AuraEffect(LEDController& ledController,
+                       bool enableCore,
+                       bool enableInner,
+                       bool enableOuter,
+                       bool enableRing) :
     Effect(ledController),
+    coreEnabled(enableCore),
+    innerEnabled(enableInner),
+    outerEnabled(enableOuter),
+    ringEnabled(enableRing),
     lastUpdate(0)
 {
     // Reserve space for ripples to avoid memory reallocations
     ripples.reserve(MAX_RIPPLES);
 
-    Serial.println("PartyRippleEffect created - colorful expanding ripples with fade-out");
+    Serial.println("AuraEffect created - colorful expanding ripples with fade-out");
+    Serial.print("Enabled strips - Core: ");
+    Serial.print(coreEnabled ? "YES" : "NO");
+    Serial.print(", Inner: ");
+    Serial.print(innerEnabled ? "YES" : "NO");
+    Serial.print(", Outer: ");
+    Serial.print(outerEnabled ? "YES" : "NO");
+    Serial.print(", Ring: ");
+    Serial.println(ringEnabled ? "YES" : "NO");
 }
 
-PartyRippleEffect::~PartyRippleEffect() {
+AuraEffect::~AuraEffect() {
     // Vector automatically cleans up
 }
 
-void PartyRippleEffect::reset() {
+void AuraEffect::reset() {
     // Clear all active ripples
     ripples.clear();
     lastUpdate = millis();
 
-    Serial.println("PartyRippleEffect reset - all ripples cleared");
+    Serial.println("AuraEffect reset - all ripples cleared");
 }
 
-void PartyRippleEffect::update() {
+void AuraEffect::update() {
     // Target 60 FPS for smooth ripple animation
     if (!shouldUpdate(16)) {  // 16ms = ~60 FPS
         return;
@@ -48,22 +64,67 @@ void PartyRippleEffect::update() {
     leds.showAll();
 }
 
-void PartyRippleEffect::createNewRipple() {
+void AuraEffect::createNewRipple() {
     // Don't create more ripples if we're at maximum
     if (ripples.size() >= MAX_RIPPLES) {
         return;
     }
 
+    // Count how many strip types are enabled
+    int enabledCount = 0;
+    if (coreEnabled) enabledCount++;
+    if (innerEnabled) enabledCount++;
+    if (outerEnabled) enabledCount++;
+    if (ringEnabled) enabledCount++;
+
+    // If no strips are enabled, don't create ripples
+    if (enabledCount == 0) {
+        return;
+    }
+
     Ripple newRipple;
 
-    // Randomly choose inner (1) or outer (2) strips
-    newRipple.stripType = random(1, 3);
+    // Randomly choose a strip type from enabled strips only
+    int choice = random(enabledCount);
+    int currentChoice = 0;
 
-    // Randomly choose which segment (0, 1, or 2)
-    newRipple.subStrip = random(3);
+    // Map the choice to an enabled strip type
+    if (coreEnabled) {
+        if (currentChoice == choice) {
+            newRipple.stripType = 0; // Core
+        }
+        currentChoice++;
+    }
+    if (innerEnabled && currentChoice - 1 < choice) {
+        if (currentChoice == choice) {
+            newRipple.stripType = 1; // Inner
+        }
+        currentChoice++;
+    }
+    if (outerEnabled && currentChoice - 1 < choice) {
+        if (currentChoice == choice) {
+            newRipple.stripType = 2; // Outer
+        }
+        currentChoice++;
+    }
+    if (ringEnabled && currentChoice - 1 < choice) {
+        newRipple.stripType = 3; // Ring
+    }
+
+    // For strips with segments, randomly choose which segment
+    if (newRipple.stripType == 0) {
+        // Core has 3 segments
+        newRipple.subStrip = random(3);
+    } else if (newRipple.stripType == 1 || newRipple.stripType == 2) {
+        // Inner and outer have 3 segments
+        newRipple.subStrip = random(3);
+    } else {
+        // Ring doesn't have segments
+        newRipple.subStrip = 0;
+    }
 
     // Get strip length
-    int stripLength = (newRipple.stripType == 1) ? INNER_LEDS_PER_STRIP : OUTER_LEDS_PER_STRIP;
+    int stripLength = getStripLength(newRipple.stripType, newRipple.subStrip);
 
     // Allow ripple center to be off the edges of the strip
     // This creates ripples that enter from the sides
@@ -86,10 +147,14 @@ void PartyRippleEffect::createNewRipple() {
     ripples.push_back(newRipple);
 
     // Debug output
+    String stripNames[] = {"Core", "Inner", "Outer", "Ring"};
     Serial.print("New ripple created: ");
-    Serial.print(newRipple.stripType == 1 ? "Inner" : "Outer");
-    Serial.print(" strip, segment ");
-    Serial.print(newRipple.subStrip);
+    Serial.print(stripNames[newRipple.stripType]);
+    Serial.print(" strip");
+    if (newRipple.stripType != 3) { // Not ring
+        Serial.print(", segment ");
+        Serial.print(newRipple.subStrip);
+    }
     Serial.print(", position ");
     Serial.print(newRipple.centerPos);
     if (newRipple.centerPos < 0) {
@@ -100,7 +165,7 @@ void PartyRippleEffect::createNewRipple() {
     Serial.println();
 }
 
-void PartyRippleEffect::updateRipples() {
+void AuraEffect::updateRipples() {
     // Update each ripple
     for (auto& ripple : ripples) {
         if (!ripple.active) continue;
@@ -111,7 +176,6 @@ void PartyRippleEffect::updateRipples() {
         // Start fading when ripple reaches fade start radius
         if (ripple.radius > FADE_START_RADIUS) {
             // Calculate fade based on how far we've traveled
-            // We'll fade from radius 6 to radius 28 (very extended)
             float fadeDistance = ripple.radius - FADE_START_RADIUS;
             float maxFadeDistance = 22.0f; // Fade over 22 radius units (6 to 28)
 
@@ -146,17 +210,23 @@ void PartyRippleEffect::updateRipples() {
         ripples.end());
 }
 
-void PartyRippleEffect::drawRipples() {
+void AuraEffect::drawRipples() {
     // Draw each active ripple
     for (const auto& ripple : ripples) {
         if (!ripple.active) continue;
+
+        // Skip if this strip type is disabled
+        if (ripple.stripType == 0 && !coreEnabled) continue;
+        if (ripple.stripType == 1 && !innerEnabled) continue;
+        if (ripple.stripType == 2 && !outerEnabled) continue;
+        if (ripple.stripType == 3 && !ringEnabled) continue;
 
         // Draw the ripple from center-radius to center+radius
         int startPos = ripple.centerPos - (int)MAX_RADIUS;
         int endPos = ripple.centerPos + (int)MAX_RADIUS;
 
         // Get strip length
-        int stripLength = (ripple.stripType == 1) ? INNER_LEDS_PER_STRIP : OUTER_LEDS_PER_STRIP;
+        int stripLength = getStripLength(ripple.stripType, ripple.subStrip);
 
         // Draw each LED in the potential ripple area
         for (int pos = startPos; pos <= endPos; pos++) {
@@ -182,8 +252,17 @@ void PartyRippleEffect::drawRipples() {
             // Get physical LED position
             int physicalPos = leds.mapPositionToPhysical(ripple.stripType, pos, ripple.subStrip);
 
-            // Adjust for segment offset
-            if (ripple.stripType == 1) {
+            // Adjust for segment offset based on strip type
+            if (ripple.stripType == 0) {
+                // Core strips
+                int segmentLength = LED_STRIP_CORE_COUNT / 3;
+                physicalPos += ripple.subStrip * segmentLength;
+
+                // Add color to existing (allows ripples to blend)
+                if (physicalPos >= 0 && physicalPos < LED_STRIP_CORE_COUNT) {
+                    leds.getCore()[physicalPos] += ledColor;
+                }
+            } else if (ripple.stripType == 1) {
                 // Inner strips
                 physicalPos += ripple.subStrip * INNER_LEDS_PER_STRIP;
 
@@ -191,7 +270,7 @@ void PartyRippleEffect::drawRipples() {
                 if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
                     leds.getInner()[physicalPos] += ledColor;
                 }
-            } else {
+            } else if (ripple.stripType == 2) {
                 // Outer strips
                 physicalPos += ripple.subStrip * OUTER_LEDS_PER_STRIP;
 
@@ -199,38 +278,76 @@ void PartyRippleEffect::drawRipples() {
                 if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
                     leds.getOuter()[physicalPos] += ledColor;
                 }
+            } else if (ripple.stripType == 3) {
+                // Ring strip (no segments)
+                if (physicalPos >= 0 && physicalPos < LED_STRIP_RING_COUNT) {
+                    leds.getRing()[physicalPos] += ledColor;
+                }
             }
         }
     }
 
     // Apply brightness limiting to prevent oversaturation when ripples overlap
     // This ensures overlapping ripples create nice color blends without going pure white
-    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
-        CRGB& pixel = leds.getInner()[i];
-        // Limit maximum brightness while preserving color ratios
-        uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
-        if (maxComponent > 230) {  // Threshold for better color mixing
-            float scale = 230.0f / maxComponent;
-            pixel.r = pixel.r * scale;
-            pixel.g = pixel.g * scale;
-            pixel.b = pixel.b * scale;
+
+    // Limit core strip brightness
+    if (coreEnabled) {
+        for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+            CRGB& pixel = leds.getCore()[i];
+            uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
+            if (maxComponent > 230) {
+                float scale = 230.0f / maxComponent;
+                pixel.r = pixel.r * scale;
+                pixel.g = pixel.g * scale;
+                pixel.b = pixel.b * scale;
+            }
         }
     }
 
-    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
-        CRGB& pixel = leds.getOuter()[i];
-        // Limit maximum brightness while preserving color ratios
-        uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
-        if (maxComponent > 230) {  // Threshold for better color mixing
-            float scale = 230.0f / maxComponent;
-            pixel.r = pixel.r * scale;
-            pixel.g = pixel.g * scale;
-            pixel.b = pixel.b * scale;
+    // Limit inner strip brightness
+    if (innerEnabled) {
+        for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
+            CRGB& pixel = leds.getInner()[i];
+            uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
+            if (maxComponent > 230) {
+                float scale = 230.0f / maxComponent;
+                pixel.r = pixel.r * scale;
+                pixel.g = pixel.g * scale;
+                pixel.b = pixel.b * scale;
+            }
+        }
+    }
+
+    // Limit outer strip brightness
+    if (outerEnabled) {
+        for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+            CRGB& pixel = leds.getOuter()[i];
+            uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
+            if (maxComponent > 230) {
+                float scale = 230.0f / maxComponent;
+                pixel.r = pixel.r * scale;
+                pixel.g = pixel.g * scale;
+                pixel.b = pixel.b * scale;
+            }
+        }
+    }
+
+    // Limit ring strip brightness
+    if (ringEnabled && !skipRing) {
+        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+            CRGB& pixel = leds.getRing()[i];
+            uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
+            if (maxComponent > 230) {
+                float scale = 230.0f / maxComponent;
+                pixel.r = pixel.r * scale;
+                pixel.g = pixel.g * scale;
+                pixel.b = pixel.b * scale;
+            }
         }
     }
 }
 
-CRGB PartyRippleEffect::generateRandomColor() {
+CRGB AuraEffect::generateRandomColor() {
     // Generate vibrant colors using HSV color space
     // Random hue for variety, full saturation for vibrancy
     uint8_t hue = random(256);      // Random hue (0-255)
@@ -241,7 +358,7 @@ CRGB PartyRippleEffect::generateRandomColor() {
     return CHSV(hue, saturation, value);
 }
 
-float PartyRippleEffect::calculateRippleBrightness(float distance, float radius, float fadeOut) {
+float AuraEffect::calculateRippleBrightness(float distance, float radius, float fadeOut) {
     // If this LED is outside the current ripple radius, it's off
     if (distance > radius) {
         return 0.0f;
@@ -270,4 +387,19 @@ float PartyRippleEffect::calculateRippleBrightness(float distance, float radius,
     brightness *= fadeOut;
 
     return brightness;
+}
+
+int AuraEffect::getStripLength(int stripType, int subStrip) {
+    switch (stripType) {
+        case 0:  // Core - each segment is 1/3 of total
+            return LED_STRIP_CORE_COUNT / 3;
+        case 1:  // Inner strips
+            return INNER_LEDS_PER_STRIP;
+        case 2:  // Outer strips
+            return OUTER_LEDS_PER_STRIP;
+        case 3:  // Ring
+            return LED_STRIP_RING_COUNT;
+        default:
+            return 0;
+    }
 }

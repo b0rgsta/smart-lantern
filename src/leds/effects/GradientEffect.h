@@ -55,7 +55,7 @@ public:
     static Gradient createFireGradient();
     static Gradient createBlueToWhiteGradient();
     static Gradient createSunsetGradient();
-    static Gradient createInnerChristmasGradient();
+    static Gradient createCoreChristmasGradient();
     static Gradient createOuterChristmasGradient();
     static Gradient createPurpleToBlueGradient();
     static Gradient createBlueToPurpleGradient();

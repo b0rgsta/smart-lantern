@@ -1,8 +1,8 @@
 // src/leds/effects/TechnoOrangeEffect.cpp
 
-#include "TechnoOrangeEffect.h"
+#include "RegalEffect.h"
 
-TechnoOrangeEffect::TechnoOrangeEffect(LEDController& ledController) : Effect(ledController) {
+RegalEffect::RegalEffect(LEDController& ledController) : Effect(ledController) {
     // Initialize animation state and timing
     innerState = FILLING_UP;
     coreState = CORE_WAITING;
@@ -27,14 +27,14 @@ TechnoOrangeEffect::TechnoOrangeEffect(LEDController& ledController) : Effect(le
     Serial.println("TechnoOrangeEffect created - animated inner wave, shimmering core purple wave, breathing outer gradient, breathing ring");
 }
 
-TechnoOrangeEffect::~TechnoOrangeEffect() {
+RegalEffect::~RegalEffect() {
     // Clean up allocated shimmer array
     if (coreShimmerValues) {
         delete[] coreShimmerValues;
     }
 }
 
-void TechnoOrangeEffect::reset() {
+void RegalEffect::reset() {
     // Reset all animation states to beginning
     innerState = FILLING_UP;
     coreState = CORE_WAITING;
@@ -53,7 +53,7 @@ void TechnoOrangeEffect::reset() {
     Serial.println("TechnoOrangeEffect reset - all animations restarted");
 }
 
-void TechnoOrangeEffect::update() {
+void RegalEffect::update() {
     // Update the animations for inner, core, and outer strips
     updateInnerAnimation();
     updateCoreAnimation();
@@ -66,7 +66,7 @@ void TechnoOrangeEffect::update() {
     leds.showAll();
 }
 
-void TechnoOrangeEffect::updateInnerAnimation() {
+void RegalEffect::updateInnerAnimation() {
     unsigned long currentTime = millis();
     unsigned long elapsedTime = currentTime - innerAnimationStartTime;
 
@@ -193,7 +193,7 @@ void TechnoOrangeEffect::updateInnerAnimation() {
     }
 }
 
-void TechnoOrangeEffect::updateCoreShimmer() {
+void RegalEffect::updateCoreShimmer() {
     unsigned long currentTime = millis();
 
     // Only update shimmer at specified intervals
@@ -228,7 +228,7 @@ void TechnoOrangeEffect::updateCoreShimmer() {
     }
 }
 
-void TechnoOrangeEffect::updateCoreAnimation() {
+void RegalEffect::updateCoreAnimation() {
     unsigned long currentTime = millis();
     unsigned long elapsedTime = currentTime - coreAnimationStartTime;
 
@@ -314,7 +314,7 @@ void TechnoOrangeEffect::updateCoreAnimation() {
     }
 }
 
-void TechnoOrangeEffect::updateOuterAnimation() {
+void RegalEffect::updateOuterAnimation() {
     unsigned long currentTime = millis();
     unsigned long elapsedTime = currentTime - outerBreathingStartTime;
 
@@ -334,7 +334,7 @@ void TechnoOrangeEffect::updateOuterAnimation() {
     applyGradientToStrip(leds.getOuter(), LED_STRIP_OUTER_COUNT, OUTER_COLOR, currentBrightness);
 }
 
-void TechnoOrangeEffect::updateRingAnimation() {
+void RegalEffect::updateRingAnimation() {
     // Skip ring if button feedback is active (effect base class handles this)
     if (skipRing) {
         return;
@@ -363,7 +363,7 @@ void TechnoOrangeEffect::updateRingAnimation() {
     applyColorToStripWithBrightness(leds.getRing(), LED_STRIP_RING_COUNT, RING_COLOR, ringBrightness);
 }
 
-void TechnoOrangeEffect::applyGradientToStrip(CRGB* strip, int count, uint32_t baseColor, float brightness) {
+void RegalEffect::applyGradientToStrip(CRGB* strip, int count, uint32_t baseColor, float brightness) {
     // Convert base color to CRGB
     CRGB rgbColor = leds.neoColorToCRGB(baseColor);
 
@@ -390,7 +390,7 @@ void TechnoOrangeEffect::applyGradientToStrip(CRGB* strip, int count, uint32_t b
     }
 }
 
-void TechnoOrangeEffect::applyColorToStrip(CRGB* strip, int count, uint32_t color) {
+void RegalEffect::applyColorToStrip(CRGB* strip, int count, uint32_t color) {
     // Convert the 32-bit color value to CRGB format
     CRGB rgbColor = leds.neoColorToCRGB(color);
 
@@ -400,7 +400,7 @@ void TechnoOrangeEffect::applyColorToStrip(CRGB* strip, int count, uint32_t colo
     }
 }
 
-void TechnoOrangeEffect::applyColorToStripWithBrightness(CRGB* strip, int count, uint32_t color, float brightness) {
+void RegalEffect::applyColorToStripWithBrightness(CRGB* strip, int count, uint32_t color, float brightness) {
     // Convert the 32-bit color value to CRGB format
     CRGB rgbColor = leds.neoColorToCRGB(color);
 

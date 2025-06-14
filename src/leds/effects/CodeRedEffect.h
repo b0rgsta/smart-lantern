@@ -40,13 +40,13 @@ struct RingTrail {
  * - Ring: Breathing red trails that move in circles around the ring
  * - All breathing elements use the same timing for synchronized effect
  */
-class CoreGrowEffect : public Effect {
+class CodeRedEffect : public Effect {
 public:
     /**
      * Constructor
      * @param ledController Reference to the LED controller
      */
-    CoreGrowEffect(LEDController& ledController);
+    CodeRedEffect(LEDController& ledController);
 
     /**
      * Update the animation

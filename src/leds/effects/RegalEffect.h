@@ -19,18 +19,18 @@
  * Outer strip cycle: Breathe between 20% and 100% brightness every 5 seconds
  * Ring strip cycle: Breathe between 30% and 90% brightness opposite to outer strips
  */
-class TechnoOrangeEffect : public Effect {
+class RegalEffect : public Effect {
 public:
     /**
      * Constructor - creates the techno orange effect
      * @param ledController Reference to the LED controller for drawing
      */
-    TechnoOrangeEffect(LEDController& ledController);
+    RegalEffect(LEDController& ledController);
 
     /**
      * Destructor - cleans up allocated memory
      */
-    ~TechnoOrangeEffect();
+    ~RegalEffect();
 
     /**
      * Update the effect - applies the colors to all strips

@@ -277,11 +277,11 @@ Gradient GradientEffect::createOuterChristmasGradient() {
 }
 
 // Static method to create a Christmas gradient (red & green)
-Gradient GradientEffect::createInnerChristmasGradient() {
+Gradient GradientEffect::createCoreChristmasGradient() {
     Gradient gradient;
 
     // Add red at position 0.0
-    gradient.emplace_back(0xFF0000, 0.0f);
+    gradient.emplace_back(0x000000, 0.0f);
 
     // Alternate white and red, properly spaced
     for (unsigned int i = 0; i < 9; i++) {
@@ -290,7 +290,7 @@ Gradient GradientEffect::createInnerChristmasGradient() {
 
         // Red at positions 0.4, 0.8, etc.
         if (i < 8) {
-            gradient.emplace_back(0xFF0000, 0.3f + (i * 0.2f));
+            gradient.emplace_back(0x000000, 0.3f + (i * 0.2f));
         }
     }
 
