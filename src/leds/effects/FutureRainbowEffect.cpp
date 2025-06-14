@@ -318,15 +318,26 @@ void FutureRainbowEffect::applyBreathingEffect() {
     // Update shimmer effect for all strips
     updateShimmer();
 
-    // Get current rainbow color
-    CRGB rainbowColor = getCurrentRainbowColor();
-
     // Calculate core breathing intensity using sine wave (predictable)
     float sineValue = sin(breathingPhase);
     float normalizedSine = (sineValue + 1.0f) / 2.0f; // 0.0 to 1.0
 
-    // Apply breathing with shimmer to core strip (0% to 100%)
+    // Calculate base hue for the gradient (0-255 range)
+    uint8_t baseHue = (uint8_t)(rainbowPhase * 255);
+
+    // Apply breathing with shimmer to core strip (0% to 100%) with gradient
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+        // Calculate position ratio (0.0 at bottom, 1.0 at top)
+        float positionRatio = (float)i / (LED_STRIP_CORE_COUNT - 1);
+
+        // Calculate hue offset for this position (REVERSED - top to bottom)
+        uint8_t hueOffset = (uint8_t)((1.0f - positionRatio) * 51); // 20% of 255, reversed
+        uint8_t pixelHue = baseHue + hueOffset;
+
+        // Create color for this pixel
+        CRGB rainbowColor = CHSV(pixelHue, 255, 255);
+
+        // Apply shimmer and breathing
         float shimmerMultiplier = coreShimmerValues[i];
         float finalIntensity = normalizedSine * shimmerMultiplier;
         finalIntensity = min(1.0f, finalIntensity);
@@ -343,8 +354,23 @@ void FutureRainbowEffect::applyBreathingEffect() {
     // Apply unpredictable breathing overlay to inner strips (25% to 90%)
     float innerOuterIntensity = unpredictableBreathingCurrent;
 
-    // Add breathing overlay with shimmer to all inner strip LEDs
+    // Add breathing overlay with shimmer and gradient to all inner strip LEDs
     for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
+        // Calculate which segment and position within segment
+        int segment = i / INNER_LEDS_PER_STRIP;
+        int positionInSegment = i % INNER_LEDS_PER_STRIP;
+
+        // Calculate position ratio (0.0 at bottom, 1.0 at top)
+        float positionRatio = (float)positionInSegment / (INNER_LEDS_PER_STRIP - 1);
+
+        // Calculate hue for this position (REVERSED)
+        uint8_t hueOffset = (uint8_t)((1.0f - positionRatio) * 51); // 20% of 255, reversed
+        uint8_t pixelHue = baseHue + hueOffset;
+
+        // Create rainbow color for this pixel
+        CRGB rainbowColor = CHSV(pixelHue, 255, 255);
+
+        // Apply shimmer and intensity
         float shimmerMultiplier = innerShimmerValues[i];
         float finalIntensity = innerOuterIntensity * shimmerMultiplier * 1.2f; // Boost by 20%
         finalIntensity = min(0.9f, finalIntensity);
@@ -374,16 +400,25 @@ void FutureRainbowEffect::applyBreathingEffect() {
         }
     }
 
-    // Add breathing overlay to outer strips WITH SATURATION CYCLING
+    // Add breathing overlay to outer strips WITH SATURATION CYCLING and gradient
     uint8_t currentSaturation = getCurrentOuterSaturation();
-    CHSV rainbowHSV = rgb2hsv_approximate(rainbowColor);
-    rainbowHSV.s = currentSaturation; // Apply the cycling saturation
-
-    // Convert back to RGB with adjusted saturation
-    CRGB outerRainbowColor;
-    hsv2rgb_rainbow(rainbowHSV, outerRainbowColor);
 
     for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
+        // Calculate which segment and position within segment
+        int segment = i / OUTER_LEDS_PER_STRIP;
+        int positionInSegment = i % OUTER_LEDS_PER_STRIP;
+
+        // Calculate position ratio (0.0 at bottom, 1.0 at top)
+        float positionRatio = (float)positionInSegment / (OUTER_LEDS_PER_STRIP - 1);
+
+        // Calculate hue for this position (REVERSED)
+        uint8_t hueOffset = (uint8_t)((1.0f - positionRatio) * 51); // 20% of 255, reversed
+        uint8_t pixelHue = baseHue + hueOffset;
+
+        // Create rainbow color with current saturation
+        CRGB outerRainbowColor = CHSV(pixelHue, currentSaturation, 255);
+
+        // Apply shimmer and intensity
         float shimmerMultiplier = outerShimmerValues[i];
         float finalIntensity = innerOuterIntensity * shimmerMultiplier * 1.2f; // Boost by 20%
         finalIntensity = min(0.9f, finalIntensity);
