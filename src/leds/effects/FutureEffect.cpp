@@ -6,12 +6,14 @@ FutureEffect::FutureEffect(LEDController& ledController) :
     Effect(ledController),
     lastUpdateTime(0),
     breathingPhase(0.0f),
+    colorFadePhase(0.0f),  // Initialize color fade phase
     unpredictableBreathingPhase(0.0f),
     unpredictableBreathingSpeed(0.01f),
-    unpredictableBreathingTarget(0.55f), // Start at middle of range (increased)
+    unpredictableBreathingTarget(0.55f), // Start at middle of range
     unpredictableBreathingCurrent(0.55f),
     lastBreathingChange(0),
-    lastShimmerUpdate(0)
+    lastShimmerUpdate(0),
+    lastSparkleUpdate(0)  // Initialize sparkle timing
 {
     // Reserve space for trails to avoid memory reallocations
     trails.reserve(MAX_TRAILS);
@@ -35,6 +37,9 @@ FutureEffect::FutureEffect(LEDController& ledController) :
     // Allocate memory for outer shimmer values
     outerShimmerValues = new float[LED_STRIP_OUTER_COUNT];
 
+    // Allocate memory for ring sparkle values
+    ringSparkleValues = new float[LED_STRIP_RING_COUNT];
+
     // Initialize all shimmer values to 1.0 (no effect initially)
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
         coreShimmerValues[i] = 1.0f;
@@ -50,7 +55,12 @@ FutureEffect::FutureEffect(LEDController& ledController) :
         outerShimmerValues[i] = 1.0f;
     }
 
-    Serial.println("FutureEffect initialized - trails with shimmering core and unpredictable inner/outer breathing");
+    // Initialize all sparkle values to 0.0 (no sparkle initially)
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        ringSparkleValues[i] = 0.0f;
+    }
+
+    Serial.println("FutureEffect initialized - trails with color-shifting blue and sparkling ring");
 }
 
 FutureEffect::~FutureEffect() {
@@ -64,6 +74,9 @@ FutureEffect::~FutureEffect() {
     if (outerShimmerValues) {
         delete[] outerShimmerValues;
     }
+    if (ringSparkleValues) {
+        delete[] ringSparkleValues;
+    }
     // Vector automatically cleans up when destroyed
 }
 
@@ -75,6 +88,7 @@ void FutureEffect::reset() {
 
     // Reset breathing phases
     breathingPhase = 0.0f;
+    colorFadePhase = 0.0f;  // Reset color fade phase
     unpredictableBreathingPhase = 0.0f;
     unpredictableBreathingCurrent = 0.55f;
     unpredictableBreathingTarget = 0.55f;
@@ -95,6 +109,11 @@ void FutureEffect::reset() {
         outerShimmerValues[i] = 1.0f;
     }
 
+    // Reset ring sparkle values
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        ringSparkleValues[i] = 0.0f;
+    }
+
     Serial.println("FutureEffect reset - all trails cleared");
 }
 
@@ -111,6 +130,12 @@ void FutureEffect::update() {
     breathingPhase += BREATHING_SPEED;
     if (breathingPhase > 2.0f * PI) {
         breathingPhase -= 2.0f * PI;  // Keep phase in 0 to 2*PI range
+    }
+
+    // Update color fade phase (slower than breathing for subtle effect)
+    colorFadePhase += COLOR_FADE_SPEED;
+    if (colorFadePhase > 2.0f * PI) {
+        colorFadePhase -= 2.0f * PI;  // Keep phase in 0 to 2*PI range
     }
 
     // Update unpredictable breathing parameters
@@ -132,6 +157,28 @@ void FutureEffect::update() {
 
     // Show all the changes
     leds.showAll();
+}
+
+CRGB FutureEffect::getCurrentBlueColor() {
+    // Calculate fade between electric blue and deep blue using sine wave
+    float sineValue = sin(colorFadePhase);          // -1.0 to 1.0
+    float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
+
+    // Extract color components from both blues
+    uint8_t electricR = (ELECTRIC_BLUE_RGB >> 16) & 0xFF;  // 3
+    uint8_t electricG = (ELECTRIC_BLUE_RGB >> 8) & 0xFF;   // 215
+    uint8_t electricB = ELECTRIC_BLUE_RGB & 0xFF;          // 252
+
+    uint8_t deepR = (DEEP_BLUE_RGB >> 16) & 0xFF;  // 0
+    uint8_t deepG = (DEEP_BLUE_RGB >> 8) & 0xFF;   // 128
+    uint8_t deepB = DEEP_BLUE_RGB & 0xFF;          // 255
+
+    // Interpolate between the two colors
+    uint8_t currentR = electricR + (deepR - electricR) * normalizedSine;
+    uint8_t currentG = electricG + (deepG - electricG) * normalizedSine;
+    uint8_t currentB = electricB + (deepB - electricB) * normalizedSine;
+
+    return CRGB(currentR, currentG, currentB);
 }
 
 void FutureEffect::updateUnpredictableBreathing() {
@@ -252,6 +299,9 @@ void FutureEffect::updateTrails() {
 }
 
 void FutureEffect::drawTrails() {
+    // Get current blue color for trail tips
+    CRGB currentBlueColor = getCurrentBlueColor();
+
     // Draw each active trail
     for (const auto& trail : trails) {
         if (!trail.isActive) continue;
@@ -289,21 +339,21 @@ void FutureEffect::drawTrails() {
             // Calculate color based on position in trail
             CRGB color;
             if (i == 0 || i == 1) {
-                // First TWO LEDs are electric blue for more vibrant tip
-                uint8_t r = (COLORED_TRAIL_RGB >> 16) & 0xFF;
-                uint8_t g = (COLORED_TRAIL_RGB >> 8) & 0xFF;
-                uint8_t b = COLORED_TRAIL_RGB & 0xFF;
-
+                // First TWO LEDs use current blue color for more vibrant tip
                 if (i == 0) {
                     // First LED - full brightness with boost for extra vibrancy
                     color = CRGB(
-                        min(255, (int)(r * 1.2f)),  // Boost blue components slightly
-                        min(255, (int)(g * 1.2f)),
-                        min(255, (int)(b * 1.2f))
+                        min(255, (int)(currentBlueColor.r * 1.2f)),  // Boost components slightly
+                        min(255, (int)(currentBlueColor.g * 1.2f)),
+                        min(255, (int)(currentBlueColor.b * 1.2f))
                     );
                 } else {
-                    // Second LED - 80% brightness blue (instead of white)
-                    color = CRGB(r * 0.8f, g * 0.8f, b * 0.8f);
+                    // Second LED - 80% brightness blue
+                    color = CRGB(
+                        currentBlueColor.r * 0.8f,
+                        currentBlueColor.g * 0.8f,
+                        currentBlueColor.b * 0.8f
+                    );
                 }
             } else {
                 // Rest of trail is white with BLUE TINT and reduced brightness
@@ -399,10 +449,8 @@ void FutureEffect::applyBreathingEffect() {
     float sineValue = sin(breathingPhase);      // -1.0 to 1.0
     float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
 
-    // Extract electric blue color components
-    uint8_t blueR = (COLORED_TRAIL_RGB >> 16) & 0xFF;
-    uint8_t blueG = (COLORED_TRAIL_RGB >> 8) & 0xFF;
-    uint8_t blueB = COLORED_TRAIL_RGB & 0xFF;
+    // Get current blue color for all effects
+    CRGB currentBlueColor = getCurrentBlueColor();
 
     // Apply breathing with shimmer to core strip (0% to 100%)
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
@@ -414,9 +462,9 @@ void FutureEffect::applyBreathingEffect() {
         finalIntensity = min(1.0f, finalIntensity);
 
         CRGB coreColor = CRGB(
-            blueR * finalIntensity,
-            blueG * finalIntensity,
-            blueB * finalIntensity
+            currentBlueColor.r * finalIntensity,
+            currentBlueColor.g * finalIntensity,
+            currentBlueColor.b * finalIntensity
         );
 
         leds.getCore()[i] = coreColor;
@@ -435,9 +483,9 @@ void FutureEffect::applyBreathingEffect() {
         finalIntensity = min(0.9f, finalIntensity);
 
         CRGB innerOverlay = CRGB(
-            blueR * finalIntensity,
-            blueG * finalIntensity,
-            blueB * finalIntensity
+            currentBlueColor.r * finalIntensity,
+            currentBlueColor.g * finalIntensity,
+            currentBlueColor.b * finalIntensity
         );
 
         // Use more aggressive blending - REPLACE more than ADD
@@ -471,9 +519,9 @@ void FutureEffect::applyBreathingEffect() {
         finalIntensity = min(0.9f, finalIntensity);
 
         CRGB outerOverlay = CRGB(
-            blueR * finalIntensity,
-            blueG * finalIntensity,
-            blueB * finalIntensity
+            currentBlueColor.r * finalIntensity,
+            currentBlueColor.g * finalIntensity,
+            currentBlueColor.b * finalIntensity
         );
 
         // Use more aggressive blending - REPLACE more than ADD
@@ -494,6 +542,61 @@ void FutureEffect::applyBreathingEffect() {
             pixel.r = pixel.r * scale;
             pixel.g = pixel.g * scale;
             pixel.b = pixel.b * scale;
+        }
+    }
+
+    // Add sparkly breathing effect to ring strip
+    if (!skipRing) {
+        updateRingSparkles();
+
+        // Calculate ring breathing intensity (20% to 100% for dramatic effect)
+        float ringBreathingIntensity = 0.2f + (normalizedSine * 0.8f); // 20% to 100%
+
+        // Apply sparkles with current blue color to ring
+        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+            // Apply sparkle multiplier AND breathing intensity
+            float sparkleMultiplier = ringSparkleValues[i];
+
+            // Make sparkles affected by breathing - they sparkle within the breathing range
+            float finalIntensity = ringBreathingIntensity * (0.3f + sparkleMultiplier * 0.7f);
+            // This means: minimum 30% of breathing intensity, up to 100% when sparkling
+
+            // Apply the color with sparkle and breathing
+            CRGB ringColor = CRGB(
+                currentBlueColor.r * finalIntensity,
+                currentBlueColor.g * finalIntensity,
+                currentBlueColor.b * finalIntensity
+            );
+
+            leds.getRing()[i] = ringColor;
+        }
+    }
+}
+
+void FutureEffect::updateRingSparkles() {
+    unsigned long currentTime = millis();
+
+    // Only update sparkles at specified intervals
+    if (currentTime - lastSparkleUpdate < SPARKLE_UPDATE_INTERVAL) {
+        return;
+    }
+
+    lastSparkleUpdate = currentTime;
+
+    // Update each LED's sparkle state
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        // Random chance to start a new sparkle
+        if (ringSparkleValues[i] < 0.1f && random(1000) < (SPARKLE_CHANCE * 1000)) {
+            // Start a new sparkle at full sparkle value
+            ringSparkleValues[i] = 1.0f;
+        } else {
+            // Decay existing sparkle
+            ringSparkleValues[i] *= (1.0f - SPARKLE_DECAY);
+
+            // Ensure minimum threshold (consider fully faded below 0.01)
+            if (ringSparkleValues[i] < 0.01f) {
+                ringSparkleValues[i] = 0.0f;
+            }
         }
     }
 }

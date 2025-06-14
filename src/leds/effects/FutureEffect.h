@@ -24,12 +24,12 @@ struct FutureTrail {
  * FutureEffect - Creates upward-moving accelerating trails with breathing core effect
  *
  * Features:
- * - Trails with electric blue tip and white tail that fades to black
+ * - Trails with electric blue tip that fades to deeper blue and white tail
  * - Trails randomly appear and move upward with acceleration
- * - Core strip breathes electric blue from 0% to 100% brightness
- * - Inner strips have unpredictable blue breathing overlay at 10% to 80% brightness
- * - Outer strips have unpredictable blue breathing overlay at 10% to 80% brightness
- * - Breathing effects use random variations for unpredictable patterns
+ * - Core strip breathes blue color that shifts between electric and deep blue
+ * - Inner strips have unpredictable blue breathing overlay at 25% to 90% brightness
+ * - Outer strips have unpredictable blue breathing overlay at 25% to 90% brightness
+ * - Ring has sparkle effect that matches the current blue color
  * - Both core and inner/outer strips have shimmering effect
  */
 class FutureEffect : public Effect {
@@ -64,21 +64,7 @@ public:
     String getName() const override { return "Future Effect"; }
 
 private:
-    // ... existing member variables ...
-
-    /**
-     * Get rainbow color based on the 30-second cycle AND vertical position
-     * @param verticalPosition Position from 0.0 (bottom) to 1.0 (top)
-     * @return Rainbow color at this position as CRGB
-     */
-    CRGB getRainbowColorAtPosition(float verticalPosition);
-
-    /**
-     * Get current rainbow hue base value (0-255)
-     * @return Base hue value
-     */
-    uint8_t getCurrentRainbowHue();
-
+    // Collection of all trails (both active and inactive)
     std::vector<FutureTrail> trails;
 
     // Effect parameters
@@ -90,21 +76,26 @@ private:
     static const int MAX_TRAIL_LENGTH = 60;        // Maximum trail length in pixels
 
     // Speed parameters (all trails start slow and accelerate) - SPED UP BY 50%
-    static constexpr float MIN_INITIAL_SPEED = 0.045f;   // Minimum initial speed (increased by 50% from 0.03f)
-    static constexpr float MAX_INITIAL_SPEED = 0.15f;    // Maximum initial speed (increased by 50% from 0.10f)
-    static constexpr float MIN_ACCELERATION = 0.003f;    // Minimum acceleration (increased by 50% from 0.002f)
-    static constexpr float MAX_ACCELERATION = 0.009f;    // Maximum acceleration (increased by 50% from 0.006f)
-    static constexpr float MAX_SPEED = 0.9f;             // Terminal velocity (increased by 50% from 0.6f)
+    static constexpr float MIN_INITIAL_SPEED = 0.045f;   // Minimum initial speed
+    static constexpr float MAX_INITIAL_SPEED = 0.15f;    // Maximum initial speed
+    static constexpr float MIN_ACCELERATION = 0.003f;    // Minimum acceleration
+    static constexpr float MAX_ACCELERATION = 0.009f;    // Maximum acceleration
+    static constexpr float MAX_SPEED = 0.9f;             // Terminal velocity
 
-    // Color for the electric blue trails (#03d7fc)
-    static const uint32_t COLORED_TRAIL_RGB = 0x03d7fc;  // Electric blue color
+    // Color definitions - two blues to fade between
+    static const uint32_t ELECTRIC_BLUE_RGB = 0x03d7fc;  // Electric blue color (original)
+    static const uint32_t DEEP_BLUE_RGB = 0x0080ff;      // Deeper, more saturated blue
 
     // Timing
     unsigned long lastUpdateTime;
 
     // Core breathing effect variables (predictable)
     float breathingPhase;               // Current phase of breathing cycle (0.0 to 2*PI)
-    static constexpr float BREATHING_SPEED = 0.005f;  // Speed of breathing cycle (slowed by 4x from 0.02f)
+    static constexpr float BREATHING_SPEED = 0.005f;  // Speed of breathing cycle
+
+    // Color fade variables
+    float colorFadePhase;               // Current phase of color fade cycle (0.0 to 2*PI)
+    static constexpr float COLOR_FADE_SPEED = 0.003f;  // Speed of color fade (slower than breathing)
 
     // Unpredictable breathing effect variables for inner/outer strips
     float unpredictableBreathingPhase;  // Current phase for unpredictable breathing
@@ -121,7 +112,21 @@ private:
     float* innerShimmerValues;          // Array to store shimmer brightness multipliers for inner strips
     float* outerShimmerValues;          // Array to store shimmer brightness multipliers for outer strips
     unsigned long lastShimmerUpdate;    // When shimmer was last updated
-    static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 100;  // Update shimmer every 100ms (slowed by 2x from 50ms)
+    static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 100;  // Update shimmer every 100ms
+
+    // Ring sparkle effect variables
+    float* ringSparkleValues;           // Array to store sparkle state for each ring LED (0.0 to 1.0)
+    unsigned long lastSparkleUpdate;    // When sparkles were last updated
+    static constexpr unsigned long SPARKLE_UPDATE_INTERVAL = 50;  // Update sparkles every 50ms
+    static constexpr float SPARKLE_CHANCE = 0.015f;              // 1.5% chance per LED per update to sparkle
+    static constexpr float SPARKLE_DECAY = 0.05f;                // How quickly sparkles fade
+
+    /**
+     * Get the current blue color based on the fade cycle
+     * Fades between electric blue and deep blue
+     * @return Current color as CRGB
+     */
+    CRGB getCurrentBlueColor();
 
     /**
      * Create a new trail at the bottom of a random strip
@@ -151,7 +156,8 @@ private:
     /**
      * Apply breathing effect to core and inner/outer strips
      * Core breathes 0-100% predictably
-     * Inner/outer breathe 10-80% unpredictably
+     * Inner/outer breathe 25-90% unpredictably
+     * Ring has sparkle effect
      */
     void applyBreathingEffect();
 
@@ -160,6 +166,12 @@ private:
      * Creates random brightness variations for dazzling effect
      */
     void updateShimmer();
+
+    /**
+     * Update the sparkle effect for ring LEDs
+     * Creates random sparkles that fade over time
+     */
+    void updateRingSparkles();
 
     /**
      * Update the unpredictable breathing parameters
