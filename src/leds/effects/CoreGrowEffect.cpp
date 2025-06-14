@@ -361,15 +361,16 @@ void CoreGrowEffect::createNewTrail() {
     // Get strip length
     int stripLength = (newTrail.stripType == 1) ? INNER_LEDS_PER_STRIP : OUTER_LEDS_PER_STRIP;
 
-    // Set direction and starting position (start trails completely off the strip)
-    if (newTrail.stripType == 1) {
-        // Inner strips: shoot downward
-        newTrail.direction = false;
-        newTrail.position = stripLength - 1 + TRAIL_LENGTH; // Start with entire trail above the strip
+    // Randomly choose direction for both inner and outer strips
+    newTrail.direction = random(2) == 1; // true = upward, false = downward
+
+    // Set starting position based on direction (start trails completely off the strip)
+    if (newTrail.direction) {
+        // Moving upward: start with entire trail below the strip
+        newTrail.position = 0 - TRAIL_LENGTH;
     } else {
-        // Outer strips: shoot upward
-        newTrail.direction = true;
-        newTrail.position = 0 - TRAIL_LENGTH; // Start with entire trail below the strip
+        // Moving downward: start with entire trail above the strip
+        newTrail.position = stripLength - 1 + TRAIL_LENGTH;
     }
 
     // Random speed with less variation to keep trails slower and more consistent
@@ -443,10 +444,16 @@ void CoreGrowEffect::drawTrails() {
             // Skip if pixel is outside strip bounds (but don't stop drawing the trail)
             if (pixelPos < 0 || pixelPos >= stripLength) continue;
 
-            // Calculate brightness with more obvious fade to black
-            // Use exponential fade for more dramatic effect
-            float brightness = 1.0f - ((float)i / TRAIL_LENGTH);
-            brightness = brightness * brightness; // Square the brightness for more dramatic fade
+            // Calculate brightness: tip at 100%, then fade from 70% to 0%
+            float brightness;
+            if (i == 0) {
+                // First LED (tip): 100% brightness
+                brightness = 1.0f;
+            } else {
+                // Remaining LEDs: fade from 70% to 0%
+                float fadePosition = (float)(i - 1) / (TRAIL_LENGTH - 1);
+                brightness = 0.7f * (1.0f - fadePosition);
+            }
 
             // Apply breathing effect to the brightness
             brightness *= breathingMultiplier;
@@ -463,60 +470,31 @@ void CoreGrowEffect::drawTrails() {
                 physicalPos += trail.subStrip * OUTER_LEDS_PER_STRIP;
             }
 
-            // Set color with extended white-to-red blending (16 pixels total)
-            CRGB color;
-            if (i == 0) {
-                // LED 0: Pure bright white
-                color = CRGB(255 * brightness, 255 * brightness, 255 * brightness);
-            } else if (i == 1) {
-                // LED 1: Almost white
-                color = CRGB(255 * brightness, 240 * brightness, 240 * brightness);
-            } else if (i == 2) {
-                // LED 2: Very light pink
-                color = CRGB(255 * brightness, 225 * brightness, 225 * brightness);
-            } else if (i == 3) {
-                // LED 3: Light pink
-                color = CRGB(255 * brightness, 210 * brightness, 210 * brightness);
-            } else if (i == 4) {
-                // LED 4: Light pink
-                color = CRGB(255 * brightness, 190 * brightness, 190 * brightness);
-            } else if (i == 5) {
-                // LED 5: Medium-light pink
-                color = CRGB(255 * brightness, 170 * brightness, 170 * brightness);
-            } else if (i == 6) {
-                // LED 6: Medium-light pink
-                color = CRGB(255 * brightness, 150 * brightness, 150 * brightness);
-            } else if (i == 7) {
-                // LED 7: Medium pink
-                color = CRGB(255 * brightness, 130 * brightness, 130 * brightness);
-            } else if (i == 8) {
-                // LED 8: Medium pink
-                color = CRGB(255 * brightness, 110 * brightness, 110 * brightness);
-            } else if (i == 9) {
-                // LED 9: Medium-dark pink
-                color = CRGB(255 * brightness, 90 * brightness, 90 * brightness);
-            } else if (i == 10) {
-                // LED 10: Medium-dark pink
-                color = CRGB(255 * brightness, 75 * brightness, 75 * brightness);
-            } else if (i == 11) {
-                // LED 11: Dark pink
-                color = CRGB(255 * brightness, 60 * brightness, 60 * brightness);
-            } else if (i == 12) {
-                // LED 12: Dark pink
-                color = CRGB(255 * brightness, 45 * brightness, 45 * brightness);
-            } else if (i == 13) {
-                // LED 13: Very dark pink
-                color = CRGB(255 * brightness, 30 * brightness, 30 * brightness);
-            } else if (i == 14) {
-                // LED 14: Very dark pink/red
-                color = CRGB(255 * brightness, 20 * brightness, 20 * brightness);
-            } else if (i == 15) {
-                // LED 15: Almost red
-                color = CRGB(255 * brightness, 10 * brightness, 10 * brightness);
-            } else {
-                // Rest of trail: pure red fading to black with breathing effect
-                uint8_t redValue = 255 * brightness;
-                color = CRGB(redValue, 0, 0);
+            // Pure red color for all LEDs in the trail
+            uint8_t redValue = 255 * brightness;
+            CRGB color = CRGB(redValue, 0, 0);
+
+            // Apply fade-to-black mask for outer strips only
+            if (trail.stripType == 2) {
+                // Calculate position ratio (0.0 at bottom, 1.0 at top)
+                float positionRatio = (float)pixelPos / (OUTER_LEDS_PER_STRIP - 1);
+
+                // Apply fade starting at 30% up the strip
+                if (positionRatio > 0.3f) {
+                    // Calculate fade amount (0.0 at 30%, 1.0 at top)
+                    float fadeProgress = (positionRatio - 0.3f) / 0.7f; // 0.7 = 1.0 - 0.3
+
+                    // Apply exponential curve for smoother fade
+                    fadeProgress = fadeProgress * fadeProgress; // Square for exponential fade
+
+                    // Calculate fade multiplier (1.0 at 30%, 0.0 at top)
+                    float fadeMask = 1.0f - fadeProgress;
+
+                    // Apply fade mask to the color
+                    color.r = color.r * fadeMask;
+                    color.g = color.g * fadeMask;
+                    color.b = color.b * fadeMask;
+                }
             }
 
             // Set the LED
