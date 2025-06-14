@@ -9,7 +9,6 @@
 #include "leds/LEDController.h"
 #include "sensors/SensorController.h"
 #include "leds/effects/Effect.h"
-#include "leds/effects/StartupEffect.h"
 #include "leds/effects/FireEffect.h"
 #include "leds/MPR121LEDHandler.h"
 
@@ -57,7 +56,6 @@ private:
   std::vector<std::vector<Effect*>> effects;
 
   // Special effects that need direct access
-  StartupEffect* startupEffect;    // Used for initialization
   FireEffect* fireEffectPtr;       // Used for temperature override
 
   // State variables

@@ -36,10 +36,10 @@ void RgbPatternEffect::update() {
     // Clear all strips first
     leds.clearAll();
 
-    // Update scroll position for upward movement (core only now)
-    scrollPosition -= SCROLL_SPEED;
-    if (scrollPosition < 0) {
-        scrollPosition += PATTERN_LENGTH;
+    // Update scroll position for DOWNWARD movement
+    scrollPosition += SCROLL_SPEED;
+    if (scrollPosition >= PATTERN_LENGTH) {
+        scrollPosition -= PATTERN_LENGTH;
     }
 
     // Update ring scroll position for continuous rotation
@@ -65,7 +65,7 @@ void RgbPatternEffect::update() {
 
     // Draw effects on each strip type
 
-    // Core: upward moving RGB dots
+    // Core: DOWNWARD moving RGB dots
     for (int segment = 0; segment < 3; segment++) {
         drawCoreSegment(segment);
     }
@@ -98,6 +98,7 @@ int RgbPatternEffect::getCurrentDotSize() {
 CRGB RgbPatternEffect::getColorAtPosition(float position, int dotSize) {
     // Normalize position to pattern length
     float normalizedPos = fmod(position, PATTERN_LENGTH);
+    if (normalizedPos < 0) normalizedPos += PATTERN_LENGTH;
 
     // Determine which color section we're in
     int colorSection = (int)(normalizedPos / PATTERN_SPACING);
@@ -135,12 +136,30 @@ void RgbPatternEffect::drawCoreSegment(int segment) {
     // Draw pattern on this segment
     CRGB* segmentStart = leds.getCore() + (segment * CORE_LEDS_PER_SEGMENT);
 
+    // For proper alignment, all segments need to show the same pattern at the same height
     for (int i = 0; i < CORE_LEDS_PER_SEGMENT; i++) {
-        // Calculate UV position (0.0 at bottom, 1.0 at top)
-        float uvPos = (float)i / CORE_LEDS_PER_SEGMENT;
+        // Calculate pattern position with segment-specific adjustments
+        float patternPos;
 
-        // Get color at this UV position
-        CRGB color = getColorAtUV(uvPos, currentDotSize);
+        switch (segment) {
+            case 0:
+                // First segment - baseline
+                patternPos = i + scrollPosition;
+                break;
+
+            case 1:
+                // Middle segment - flipped and needs -5 offset
+                patternPos = (CORE_LEDS_PER_SEGMENT - 1 - i) + scrollPosition - 5;
+                break;
+
+            case 2:
+                // Third segment - needs +3 offset to catch up
+                patternPos = i + scrollPosition + 4;
+                break;
+        }
+
+        // Get color at this position
+        CRGB color = getColorAtPosition(patternPos, currentDotSize);
 
         // Set the LED color
         segmentStart[i] = color;

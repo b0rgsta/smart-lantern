@@ -2,7 +2,6 @@
 
 #include "SmartLantern.h"
 
-#include "leds/effects/StartupEffect.h"
 #include "leds/effects/RainbowEffect.h"
 #include "leds/effects/FireEffect.h"
 #include "leds/effects/MatrixEffect.h"
@@ -39,7 +38,6 @@ SmartLantern::SmartLantern() : isPowerOn(false),
     effects.resize(5); // One vector for each mode (0-4)
 
     // Create special effects that need direct access
-    startupEffect = new StartupEffect(leds);
     fireEffectPtr = new FireEffect(leds);
 
     // Call helper to initialize all effects
@@ -224,17 +222,8 @@ void SmartLantern::begin() {
     tempButtonState = preferences.getUChar("tempBtn", 0);
     lightButtonState = preferences.getUChar("lightBtn", 0);
 
-    // Start with power off until startup completes
-    isPowerOn = false;
 
-    // Show startup animation first
-    this->startupEffect->reset(); // Reset the startup effect first
-    while (!this->startupEffect->isComplete()) {
-        this->startupEffect->update();
-        delay(20);
-    }
-
-    // Now set the power on and restore previous mode/effect (or defaults)
+// Set power on immediately
     isPowerOn = true;
 
     // Set mode and effect (default to Ambient white if no valid saved data)
