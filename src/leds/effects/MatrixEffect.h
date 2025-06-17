@@ -16,6 +16,16 @@ struct Drop {
     bool isWhite;       // Special white flashing drops
 };
 
+// Structure for continuous matrix ring trails
+struct MatrixRingTrail {
+    float position;     // Current head position around the ring
+    float speed;        // Movement speed (pixels per frame)
+    uint8_t hue;        // Color hue for this trail
+    bool active;        // Whether this trail is active
+    unsigned long creationTime; // When this trail was created
+    int trailLength;    // Length of the trail
+};
+
 class MatrixEffect : public Effect {
 public:
     MatrixEffect(LEDController& ledController);
@@ -34,7 +44,7 @@ private:
     static const uint8_t FLICKER_CHANCE = 30;          // Chance of a flicker (out of 100)
     static const uint8_t WHITE_FLASH_CHANCE = 5;       // Chance of a white flash (out of 100)
     static const uint8_t WHITE_FLASH_MIN = 100;        // Minimum brightness for white flashes
-    static const uint8_t HUE_ROTATION_SPEED = 1;       // Speed of hue rotation
+    static const uint8_t HUE_ROTATION_SPEED = 1;       // Internal counter increment (1 per frame for 0.025 effective speed)
 
     // Arrays to hold drops for each strip type
     std::vector<Drop> coreDrops[3];  // Changed from single vector to array of 3
@@ -42,24 +52,39 @@ private:
     std::vector<Drop> outerDrops[NUM_OUTER_STRIPS];
     std::vector<Drop> ringDrops;
 
+    // Ring trail system for continuous trails
+    std::vector<MatrixRingTrail> ringTrails;
+    static const uint8_t MAX_RING_TRAILS = 3;           // Maximum number of active ring trails
+    static const uint8_t RING_TRAIL_LENGTH = 8;         // Length of each ring trail
+    static const unsigned long RING_TRAIL_FADEIN = 1000;       // 1 second to fade in
+    static const unsigned long RING_TRAIL_LIFESPAN = 6000;     // 6 seconds at full brightness
+    static const unsigned long RING_TRAIL_FADEOUT = 2000;      // 2 seconds to fade out completely
+    unsigned long lastRingTrailCreateTime;              // Last time we created a ring trail
+
     // Color palette - updated to use CRGB
     static const uint8_t NUM_COLORS = 5;
     CRGB colorPalette[NUM_COLORS];
-    
+
     // State variables
-    uint8_t baseHue;
+    uint16_t hueCounter;    // Counter for precise hue rotation (scaled to achieve 0.3 speed)
+    uint8_t baseHue;        // Current base hue calculated from counter
     unsigned long lastUpdate;
     unsigned long lastHueUpdate;
-    
+
     // Speed range (in pixels per frame)
     static constexpr float MIN_SPEED = 0.1f;
     static constexpr float MAX_SPEED = 0.3f;
-    
+
     // Helper methods
     void updateColorPalette();
     void createDrop(int stripType, int subStrip = 0);
     void updateStrip(int stripType, int subStrip = 0);
     void renderDrop(Drop& drop, int stripType, int subStrip, int stripLength);
+
+    // Ring-specific methods for continuous trails
+    void updateRingTrails();
+    void createNewRingTrail();
+    void drawRingTrails();
 };
 
 #endif // MATRIX_EFFECT_H

@@ -3,9 +3,11 @@
 #include "MatrixEffect.h"
 
 MatrixEffect::MatrixEffect(LEDController &ledController) : Effect(ledController),
+                                                           hueCounter(0),
                                                            baseHue(0),
                                                            lastUpdate(0),
-                                                           lastHueUpdate(0) {
+                                                           lastHueUpdate(0),
+                                                           lastRingTrailCreateTime(0) {
     // Initialize drops for each strip
     // Core strips - 3 segments
     for (int segment = 0; segment < 3; segment++) {
@@ -13,6 +15,9 @@ MatrixEffect::MatrixEffect(LEDController &ledController) : Effect(ledController)
     }
 
     ringDrops.resize(MAX_DROPS_PER_STRIP);
+
+    // Initialize ring trails vector
+    ringTrails.reserve(MAX_RING_TRAILS);
 
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
         innerDrops[i].resize(MAX_DROPS_PER_STRIP);
@@ -43,6 +48,10 @@ void MatrixEffect::reset() {
         drop.isActive = false;
     }
 
+    // Reset ring trails
+    ringTrails.clear();
+    lastRingTrailCreateTime = 0;
+
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
         for (auto& drop : innerDrops[i]) {
             drop.isActive = false;
@@ -55,9 +64,11 @@ void MatrixEffect::reset() {
         }
     }
 
-    // Reset timing
+    // Reset timing and hue counter
     lastUpdate = millis();
     lastHueUpdate = millis();
+    hueCounter = 0;
+    baseHue = 0;
 
     // Clear all LEDs
     leds.clearAll();
@@ -108,16 +119,25 @@ void MatrixEffect::update() {
     }
 
     if (!skipRing)
-        updateStrip(3); // Ring
+        updateRingTrails(); // Use new continuous trail system
 
-    // Update hue for color cycling (slower due to higher frame rate)
-    static int hueUpdateCounter = 0;
-    hueUpdateCounter++;
-    if (hueUpdateCounter >= 10) {
-        // Update hue every 10 frames instead of every frame
-        baseHue += HUE_ROTATION_SPEED;
+    // Update hue counter for precise 0.025 rotation speed (4x slower than 0.1)
+    hueCounter += HUE_ROTATION_SPEED;  // Add 1 each frame
+
+    // Convert counter to hue (divide by 40 to get 0.025 effective speed)
+    uint8_t currentBaseHue = (hueCounter / 40) % 255;
+
+    // Update color palette periodically
+    static int paletteUpdateCounter = 0;
+    static uint8_t lastBaseHue = 255; // Force first update
+    paletteUpdateCounter++;
+
+    if (paletteUpdateCounter >= 5 || currentBaseHue != lastBaseHue) {
+        // Update the global baseHue for palette generation
+        baseHue = currentBaseHue;
         updateColorPalette();
-        hueUpdateCounter = 0;
+        paletteUpdateCounter = 0;
+        lastBaseHue = currentBaseHue;
     }
 
     // Show all updates
@@ -156,7 +176,12 @@ void MatrixEffect::createDrop(int stripType, int subStrip) {
             // Initialize a new drop
             drop.position = stripLength - 1; // Start at the top
             drop.speed = MIN_SPEED + ((float) random(100) / 100.0f) * (MAX_SPEED - MIN_SPEED);
-            drop.hue = random(NUM_COLORS); // Random color from palette
+
+            // Assign hue within 20% of color wheel around current rotating base hue
+            // 20% of 255 = 51, so random range of ±25 around base hue
+            int hueVariation = random(51) - 25; // Random from -25 to +25
+            drop.hue = (baseHue + hueVariation) & 0xFF; // Keep within 0-255 range with wraparound
+
             drop.brightness = 255;
             drop.isActive = true;
             drop.isWhite = (random(100) < WHITE_FLASH_CHANCE); // Small chance to start as white
@@ -258,11 +283,9 @@ void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int strip
             uint8_t whiteBright = max(drop.brightness, WHITE_FLASH_MIN);
             color = CRGB(whiteBright, whiteBright, whiteBright);
         } else {
-            // Colored drop - get from palette
-            color = colorPalette[drop.hue];
-
-            // Apply brightness adjustment
-            color.nscale8_video(drop.brightness);
+            // Colored drop - use HSV with the drop's assigned hue
+            CHSV hsvColor(drop.hue, 255, drop.brightness); // Full saturation
+            hsv2rgb_rainbow(hsvColor, color);
         }
 
         // Set pixel based on strip type
@@ -282,7 +305,7 @@ void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int strip
         }
     }
 
-    // Draw the trailing fade
+    // Draw the trailing fade with white colors
     for (uint8_t i = 1; i <= TRAIL_LENGTH; i++) {
         int trailPos = headPos + i;
 
@@ -325,6 +348,134 @@ void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int strip
                     leds.getRing()[physicalPos] = trailColor;
                     break;
             }
+        }
+    }
+}
+
+void MatrixEffect::updateRingTrails() {
+    unsigned long currentTime = millis();
+
+    // Create new ring trails periodically
+    if (currentTime - lastRingTrailCreateTime >= 800) { // Create new trail every 800ms
+        createNewRingTrail();
+        lastRingTrailCreateTime = currentTime;
+    }
+
+    // Update existing ring trails
+    for (auto& trail : ringTrails) {
+        if (!trail.active) continue;
+
+        // Move the trail around the ring
+        trail.position += trail.speed;
+
+        // Wrap around when we reach the end
+        if (trail.position >= LED_STRIP_RING_COUNT) {
+            trail.position -= LED_STRIP_RING_COUNT;
+        }
+
+        // Deactivate trail after it has completely faded out
+        unsigned long trailAge = currentTime - trail.creationTime;
+        if (trailAge >= RING_TRAIL_FADEIN + RING_TRAIL_LIFESPAN + RING_TRAIL_FADEOUT) {
+            trail.active = false;
+        }
+    }
+
+    // Remove inactive trails
+    ringTrails.erase(
+        std::remove_if(ringTrails.begin(), ringTrails.end(),
+            [](const MatrixRingTrail& t) { return !t.active; }),
+        ringTrails.end());
+
+    // Draw all active ring trails
+    drawRingTrails();
+}
+
+void MatrixEffect::createNewRingTrail() {
+    // Don't create more trails if we're at maximum
+    if (ringTrails.size() >= MAX_RING_TRAILS) {
+        return;
+    }
+
+    MatrixRingTrail newTrail;
+
+    // Random starting position around the ring
+    newTrail.position = random(LED_STRIP_RING_COUNT);
+
+    // Speed between 0.1 and 0.3 pixels per frame for smooth movement
+    newTrail.speed = 0.1f + (random(100) / 100.0f) * 0.2f;
+
+    // Set trail length
+    newTrail.trailLength = RING_TRAIL_LENGTH;
+
+    // Assign hue within 20% of color wheel around current rotating base hue
+    int hueVariation = random(51) - 25; // Random from -25 to +25
+    newTrail.hue = (baseHue + hueVariation) & 0xFF;
+
+    // Set creation time
+    newTrail.creationTime = millis();
+
+    // Activate the trail
+    newTrail.active = true;
+
+    // Add to ring trails vector
+    ringTrails.push_back(newTrail);
+}
+
+void MatrixEffect::drawRingTrails() {
+    unsigned long currentTime = millis();
+
+    // Draw all active ring trails
+    for (const auto& trail : ringTrails) {
+        if (!trail.active) continue;
+
+        // Calculate trail age and fade multiplier
+        unsigned long trailAge = currentTime - trail.creationTime;
+        float trailFadeMultiplier = 1.0f;
+
+        // Apply gradual fade-in during first RING_TRAIL_FADEIN period
+        if (trailAge < RING_TRAIL_FADEIN) {
+            trailFadeMultiplier = (float)trailAge / RING_TRAIL_FADEIN;
+        }
+        // Apply gradual fade-out after RING_TRAIL_FADEIN + RING_TRAIL_LIFESPAN
+        else if (trailAge > RING_TRAIL_FADEIN + RING_TRAIL_LIFESPAN) {
+            unsigned long fadeAge = trailAge - RING_TRAIL_FADEIN - RING_TRAIL_LIFESPAN;
+            trailFadeMultiplier = 1.0f - ((float)fadeAge / RING_TRAIL_FADEOUT);
+            trailFadeMultiplier = max(0.0f, trailFadeMultiplier); // Ensure non-negative
+        }
+        // Full brightness during middle period
+        // (trailFadeMultiplier remains 1.0f)
+
+        // Draw the trail with fading effect
+        for (int i = 0; i < trail.trailLength; i++) {
+            // Calculate position for this segment of the trail
+            float segmentPos = trail.position - i;
+
+            // Handle wraparound
+            while (segmentPos < 0) segmentPos += LED_STRIP_RING_COUNT;
+            while (segmentPos >= LED_STRIP_RING_COUNT) segmentPos -= LED_STRIP_RING_COUNT;
+
+            int ledIndex = (int)segmentPos;
+
+            // Calculate brightness fade (head is brightest, tail fades out)
+            float fadeRatio = 1.0f - ((float)i / trail.trailLength);
+            fadeRatio = fadeRatio * fadeRatio; // Square for exponential fade
+
+            // Apply overall trail fade multiplier
+            fadeRatio *= trailFadeMultiplier;
+
+            CRGB color;
+            if (i == 0) {
+                // Head of trail - use the colored hue
+                CHSV hsvColor(trail.hue, 255, 255 * fadeRatio);
+                hsv2rgb_rainbow(hsvColor, color);
+            } else {
+                // Trail segments - white with decreasing brightness
+                uint8_t whiteBright = 255 * fadeRatio * TRAIL_BRIGHTNESS / 255; // Scale by TRAIL_BRIGHTNESS
+                color = CRGB(whiteBright, whiteBright, whiteBright);
+            }
+
+            // Blend with existing color (for overlapping trails)
+            leds.getRing()[ledIndex] += color;
         }
     }
 }
