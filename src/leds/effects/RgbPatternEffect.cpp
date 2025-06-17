@@ -36,10 +36,10 @@ void RgbPatternEffect::update() {
     // Clear all strips first
     leds.clearAll();
 
-    // Update scroll position for DOWNWARD movement
-    scrollPosition += SCROLL_SPEED;
-    if (scrollPosition >= PATTERN_LENGTH) {
-        scrollPosition -= PATTERN_LENGTH;
+    // Update scroll position for UPWARD movement (CHANGED: was DOWNWARD)
+    scrollPosition -= SCROLL_SPEED;
+    if (scrollPosition < 0) {
+        scrollPosition += PATTERN_LENGTH;
     }
 
     // Update ring scroll position for continuous rotation
@@ -65,7 +65,7 @@ void RgbPatternEffect::update() {
 
     // Draw effects on each strip type
 
-    // Core: DOWNWARD moving RGB dots
+    // Core: UPWARD moving RGB dots (CHANGED: was DOWNWARD)
     for (int segment = 0; segment < 3; segment++) {
         drawCoreSegment(segment);
     }
@@ -143,17 +143,17 @@ void RgbPatternEffect::drawCoreSegment(int segment) {
 
         switch (segment) {
             case 0:
-                // First segment - baseline
+                // First segment - baseline (for upward movement)
                 patternPos = i + scrollPosition;
                 break;
 
             case 1:
-                // Middle segment - flipped and needs -5 offset
+                // Middle segment - flipped and needs -5 offset (for upward movement)
                 patternPos = (CORE_LEDS_PER_SEGMENT - 1 - i) + scrollPosition - 5;
                 break;
 
             case 2:
-                // Third segment - needs +3 offset to catch up
+                // Third segment - needs +4 offset to catch up (for upward movement)
                 patternPos = i + scrollPosition + 4;
                 break;
         }
@@ -231,46 +231,39 @@ void RgbPatternEffect::updateOuterWaves() {
     float sineValue = sin(outerBreathingPhase);
     float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
 
-    // Brightness ranges from 20% to 100%
-    float brightness = 0.2f + (normalizedSine * 0.8f);
+    // Brightness ranges from 15% to 45% for subtle effect
+    float brightness = 0.15f + (normalizedSine * 0.30f);
 
-    // Draw breathing waves on each outer strip segment
+    // Calculate color rotation phase (0, 1, or 2 for the 3 color positions)
+    float colorCyclePhase = fmod(outerBreathingPhase, 6.0f * PI) / (2.0f * PI);  // 0.0 to 3.0 over time
+    int colorOffset = (int)colorCyclePhase % 3;  // 0, 1, or 2
+
+    // Set each segment to a different color, rotating over time
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
-        // Each segment shows a different color phase
-        // This creates a wave effect up the lantern
-        int colorOffset = segment;  // 0, 1, or 2
+        CRGB* segmentStart = leds.getOuter() + (segment * OUTER_LEDS_PER_STRIP);
 
-        for (int led = 0; led < OUTER_LEDS_PER_STRIP; led++) {
-            // Calculate which color this LED should be
-            // Create gradient within each segment
-            float gradientPos = (float)led / OUTER_LEDS_PER_STRIP;
+        // Calculate which color this segment gets (with rotation)
+        int colorIndex = (segment + colorOffset) % 3;
 
-            // Blend between current color and next color
-            int currentColor = (colorOffset + (int)(outerBreathingPhase / (2.0f * PI / 3))) % 3;
-            int nextColor = (currentColor + 1) % 3;
+        CRGB segmentColor;
+        switch (colorIndex) {
+            case 0: segmentColor = CRGB(255, 0, 0); break;    // Red
+            case 1: segmentColor = CRGB(0, 255, 0); break;    // Green
+            case 2: segmentColor = CRGB(0, 0, 255); break;    // Blue
+        }
 
-            // Calculate blend factor based on phase within color transition
-            float phaseInColor = fmod(outerBreathingPhase, 2.0f * PI / 3) / (2.0f * PI / 3);
+        // Apply breathing brightness to the color
+        segmentColor.nscale8(255 * brightness);
 
-            // Get the two colors to blend
-            CRGB color1 = getIndexedColor(currentColor);
-            CRGB color2 = getIndexedColor(nextColor);
-
-            // Blend colors
-            CRGB blendedColor = color1.lerp8(color2, phaseInColor * 255);
-
-            // Apply brightness and gradient fade
-            float finalBrightness = brightness * (1.0f - gradientPos * 0.7f); // Fade to 30% at top
-            blendedColor.nscale8(255 * finalBrightness);
-
-            // Set LED color
-            int physicalPos = segment * OUTER_LEDS_PER_STRIP + led;
-            leds.getOuter()[physicalPos] = blendedColor;
+        // Set all LEDs in this segment to the same color
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            segmentStart[i] = segmentColor;
         }
     }
 }
 
 CRGB RgbPatternEffect::getIndexedColor(int colorIndex) {
+    // Return RGB colors based on index
     switch (colorIndex % 3) {
         case 0: return CRGB(255, 0, 0);    // Red
         case 1: return CRGB(0, 255, 0);    // Green
