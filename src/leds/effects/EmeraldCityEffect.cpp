@@ -214,7 +214,10 @@ void EmeraldCityEffect::update() {
     updateInnerTrails();
     updateOuterTrails();
 
-    // Update white sparkle effects
+    // Apply glowing green overlay to ring strip (before sparkles)
+    applyRingGreenOverlay();
+
+    // Update white sparkle effects (sparkles go on top of the green glow)
     updateSparkles();
 
     // Apply fade-to-black overlay to outer strips for ambient effect
@@ -230,6 +233,34 @@ void EmeraldCityEffect::update() {
     leds.showAll();
 }
 
+void EmeraldCityEffect::applyRingGreenOverlay() {
+    // Apply a soft, glowing green overlay to the entire ring strip
+    // This creates a base green glow underneath the white/green sparkles
+
+    // Use a time-based gentle breathing effect for the glow
+    unsigned long currentTime = millis();
+    float breathingPhase = (currentTime * 0.0008f);  // Slow breathing cycle (0.8ms per increment)
+
+    // Create a gentle breathing pattern using sine wave (0.3 to 0.8 intensity)
+    float breathingIntensity = 0.3f + 0.5f * (0.5f + 0.5f * sin(breathingPhase));
+
+    // Use a pleasant emerald green hue from our palette
+    uint8_t greenHue = 110;  // Deep blue-green (cyan-emerald) from our palette
+    uint8_t saturation = 200;  // Rich but not oversaturated
+    uint8_t brightness = (uint8_t)(255 * breathingIntensity);
+
+    // Convert HSV to RGB for the base glow color
+    CHSV glowHSV(greenHue, saturation, brightness);
+    CRGB glowColor;
+    hsv2rgb_rainbow(glowHSV, glowColor);
+
+    // Apply the glow to all ring LEDs
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        // Set the base green glow color
+        // Sparkles will be added on top of this in updateSparkles()
+        leds.getRing()[i] = glowColor;
+    }
+}
 void EmeraldCityEffect::updateInnerTrails() {
     // Update trails for each inner strip
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
@@ -240,6 +271,29 @@ void EmeraldCityEffect::updateInnerTrails() {
 void EmeraldCityEffect::applyInnerWaveFade() {
     // Apply a moving black fade to inner strips that follows the core wave position
     // Creates a shadow effect that moves with the core wave
+    // The fade intensity cycles through: dark → darker → lighter → light → lighter → darker → dark
+    // This creates a dynamic pattern over several wave cycles
+
+    // Calculate how many wave cycles have completed
+    // Each wave cycle is from start to finish across the strip
+    float totalWaveDistance = LED_STRIP_CORE_COUNT + (2 * CORE_WAVE_LENGTH);  // Full cycle distance
+    float currentCycleProgress = fmod(coreWavePosition + CORE_WAVE_LENGTH, totalWaveDistance) / totalWaveDistance;
+
+    // Create 7-step fade pattern: dark(0.2) → darker(0.1) → lighter(0.5) → light(0.8) → lighter(0.5) → darker(0.1) → dark(0.2)
+    float fadeIntensityBase;
+    float cyclePhase = currentCycleProgress * 7.0f;  // Scale to 7 steps
+    int step = (int)cyclePhase;
+    float stepProgress = cyclePhase - step;  // Fractional part for smooth transitions
+
+    // Define the 7 fade intensity levels
+    float fadeSteps[7] = {0.2f, 0.1f, 0.5f, 0.8f, 0.5f, 0.1f, 0.2f};
+
+    // Get current and next step values
+    float currentStep = fadeSteps[step % 7];
+    float nextStep = fadeSteps[(step + 1) % 7];
+
+    // Smooth interpolation between steps
+    fadeIntensityBase = currentStep + (nextStep - currentStep) * stepProgress;
 
     // Apply fade to all inner strip segments
     for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
@@ -254,21 +308,38 @@ void EmeraldCityEffect::applyInnerWaveFade() {
             // Calculate distance from this LED to the core wave center
             float distanceFromWaveCenter = abs(mappedCorePosition - coreWavePosition);
 
-            // Calculate fade multiplier based on distance from wave
-            float fadeMultiplier = 1.0f;  // Default to full brightness
+            // Start with full brightness (no fade)
+            float fadeMultiplier = 1.0f;
 
             // Create a black fade zone that follows the wave
             float fadeZoneRadius = CORE_WAVE_LENGTH * 0.6f;  // Fade zone is 60% of wave length
 
             if (distanceFromWaveCenter < fadeZoneRadius) {
-                // Inside the fade zone - create black fade effect
+                // Inside the fade zone - create dynamic black fade effect
                 float normalizedDistance = distanceFromWaveCenter / fadeZoneRadius;
 
-                // Inverse fade - closer to wave center = more black
-                fadeMultiplier = normalizedDistance;  // 0.0 (black) at center, 1.0 (full) at edge
+                // Calculate core wave intensity for this position
+                float coreWaveIntensity = cos(normalizedDistance * PI / 2.0f);
 
-                // Smooth the fade with quadratic curve
-                fadeMultiplier = fadeMultiplier * fadeMultiplier;  // Quadratic for smoother transition
+                // Apply the cycling fade intensity to create the pattern
+                // When core is bright (center), apply the current fade intensity
+                // When core is dim (edges), less fade is applied
+                float dynamicFadeIntensity = fadeIntensityBase * coreWaveIntensity;
+
+                // Inner strip darkness = base fade intensity modified by wave position
+                fadeMultiplier = 1.0f - dynamicFadeIntensity;
+
+                // Ensure we don't go completely black or exceed full brightness
+                fadeMultiplier = constrain(fadeMultiplier, 0.05f, 1.0f);
+
+                // Apply edge fading for smooth transitions
+                if (normalizedDistance > 0.7f) {
+                    float edgeDistance = (normalizedDistance - 0.7f) / 0.3f;  // 0.0 to 1.0
+                    float edgeFade = 1.0f - (edgeDistance * edgeDistance);  // Quadratic fade
+
+                    // Blend toward full brightness at edges
+                    fadeMultiplier = fadeMultiplier * edgeFade + (1.0f - edgeFade);
+                }
             }
 
             // Apply fade multiplier to the inner LED
@@ -278,9 +349,7 @@ void EmeraldCityEffect::applyInnerWaveFade() {
             pixel.b = (uint8_t)(pixel.b * fadeMultiplier);
         }
     }
-}
-
-void EmeraldCityEffect::applyCoreWaveEffect() {
+}void EmeraldCityEffect::applyCoreWaveEffect() {
     // Apply a large blue-green wave that moves across the entire core strip
     // Wave fades in and out with center being brightest
 

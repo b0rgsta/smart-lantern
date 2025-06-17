@@ -197,6 +197,7 @@ private:
      */
     void applyInnerWaveFade();
 
+
     /**
      * Get a random green hue from the palette
      * @return A green hue value for trail coloring
@@ -209,6 +210,11 @@ private:
      * @return Number of LEDs in that strip type
      */
     int getStripLength(int stripType);
+    /**
+     * Apply glowing green overlay to ring strip
+     * Creates a soft green base glow underneath the sparkles
+     */
+    void applyRingGreenOverlay();
 };
 
 #endif // EMERALD_CITY_EFFECT_H
