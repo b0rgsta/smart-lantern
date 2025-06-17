@@ -32,36 +32,40 @@ SensorController::SensorController() :
 
 bool SensorController::begin() {
     bool allSensorsInitialized = true;
+    bool criticalSensorsOK = true;  // Track only critical sensors
 
     Serial.println("=== INITIALIZING SENSORS ===");
 
-    // Initialize MPR121 touch sensor
+    // Initialize MPR121 touch sensor (CRITICAL)
     if (!touchSensor.begin(MPR121_I2C_ADDR)) {
         Serial.println("MPR121 not found, check wiring!");
         allSensorsInitialized = false;
+        criticalSensorsOK = false;  // Touch sensor is critical
     } else {
         Serial.println("✓ MPR121 touch sensor initialized");
     }
 
-    // Initialize AHT10 temperature sensor
+    // Initialize AHT10 temperature sensor (NON-CRITICAL)
     if (!tempSensor.begin()) {
         Serial.println("AHT10 not found, check wiring!");
         allSensorsInitialized = false;
+        // NOT setting criticalSensorsOK = false because temp sensor is optional
     } else {
         Serial.println("✓ AHT10 temperature sensor initialized");
     }
 
-    // Initialize BMI160 via FastIMU
+    // Initialize BMI160 via FastIMU (NON-CRITICAL)
     int err = imu.init(calibrationData, BMI160_I2C_ADDR);
     if (err != 0) {
         Serial.print("BMI160 FastIMU init error: ");
         Serial.println(err);
         allSensorsInitialized = false;
+        // NOT setting criticalSensorsOK = false because IMU is optional
     } else {
         Serial.println("✓ BMI160 gyroscope initialized via FastIMU");
     }
 
-    // Initialize TOF sensor with detailed debugging
+    // Initialize TOF sensor (NON-CRITICAL)
     Serial.println("Initializing VL53L0X TOF sensor...");
     if (!tofSensor.begin()) {
         Serial.println("ERROR: VL53L0X not found! Check wiring:");
@@ -71,9 +75,11 @@ bool SensorController::begin() {
         Serial.println("  - SCL to GPIO 1");
         Serial.print("  - I2C Address should be 0x");
         Serial.println(TOF_I2C_ADDR, HEX);
+        Serial.println("NOTE: System will continue without TOF sensor");
 
         tofInitialized = false;
         allSensorsInitialized = false;
+        // NOT setting criticalSensorsOK = false because TOF is optional
     } else {
         Serial.println("✓ VL53L0X TOF sensor initialized!");
 
@@ -98,20 +104,30 @@ bool SensorController::begin() {
 
     // Print summary
     Serial.println("=== SENSOR INITIALIZATION SUMMARY ===");
-    Serial.print("Touch Sensor (MPR121): "); Serial.println(touchSensor.begin(MPR121_I2C_ADDR) ? "OK" : "FAILED");
-    Serial.print("Temperature Sensor (AHT10): "); Serial.println(tempSensor.begin() ? "OK" : "FAILED");
-    Serial.print("Gyroscope (BMI160): "); Serial.println(err == 0 ? "OK" : "FAILED");
-    Serial.print("TOF Sensor (VL53L0X): "); Serial.println(tofInitialized ? "OK" : "FAILED");
-    Serial.print("Light Sensor: OK (Pin "); Serial.print(LIGHT_SENSOR_PIN); Serial.println(")");
+    Serial.print("Touch Sensor (MPR121): ");
+    Serial.println(touchSensor.begin(MPR121_I2C_ADDR) ? "OK" : "FAILED");
+    Serial.print("Temperature Sensor (AHT10): ");
+    Serial.println(tempSensor.begin() ? "OK" : "FAILED");
+    Serial.print("Gyroscope (BMI160): ");
+    Serial.println(err == 0 ? "OK" : "FAILED");
+    Serial.print("TOF Sensor (VL53L0X): ");
+    Serial.println(tofInitialized ? "OK" : "FAILED");
+    Serial.print("Light Sensor: OK (Pin ");
+    Serial.print(LIGHT_SENSOR_PIN);
+    Serial.println(")");
 
-    // If sensor initialization was successful, start the sensor task on core 0
-    if (allSensorsInitialized) {
+    // Start sensor task if critical sensors are OK (touch sensor)
+    // We don't need ALL sensors to work, just the critical ones
+    if (criticalSensorsOK) {
         Serial.println("=== STARTING DUAL-CORE OPERATION ===");
         Serial.println("Core 1: LED effects and main logic");
         Serial.println("Core 0: Sensor processing task");
 
+        if (!allSensorsInitialized) {
+            Serial.println("NOTE: Some non-critical sensors failed, but system will continue");
+        }
+
         // Create the sensor task and pin it to core 0
-        // Parameters: task function, name, stack size, parameter, priority, handle, core
         BaseType_t taskCreated = xTaskCreatePinnedToCore(
             sensorTaskWrapper,      // Function to run
             "SensorTask",           // Task name for debugging
@@ -127,11 +143,13 @@ bool SensorController::begin() {
             Serial.println("✓ Sensor task created successfully on core 0");
         } else {
             Serial.println("ERROR: Failed to create sensor task!");
-            allSensorsInitialized = false;
+            criticalSensorsOK = false;
         }
+    } else {
+        Serial.println("ERROR: Critical sensors failed - cannot start sensor task!");
     }
 
-    return allSensorsInitialized;
+    return criticalSensorsOK;  // Return true if critical sensors are working
 }
 
 // Static wrapper function required by FreeRTOS
