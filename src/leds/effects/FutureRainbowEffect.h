@@ -32,6 +32,7 @@ struct FutureRainbowTrail {
  * - Outer strips have unpredictable rainbow breathing with saturation cycling (100% to 30% over 4 seconds)
  * - All breathing effects use the same rainbow cycle timing
  * - Ring has sparkly effect that breathes with core (20% to 100%) using gradient colors
+ * - White wave overlay on core strip that moves from one end to the other
  */
 class FutureRainbowEffect : public Effect {
 public:
@@ -117,12 +118,17 @@ private:
     static constexpr unsigned long SHIMMER_UPDATE_INTERVAL = 100;  // Update shimmer every 100ms
 
     // Ring sparkle effect variables
-    // Ring sparkle effect variables
     float* ringSparkleValues;           // Array to store sparkle state for each ring LED (0.0 to 1.0)
     unsigned long lastSparkleUpdate;    // When sparkles were last updated
     static constexpr unsigned long SPARKLE_UPDATE_INTERVAL = 50;  // Update sparkles every 50ms
-    static constexpr float SPARKLE_CHANCE = 0.025f;              // 7.5% chance per LED per update to sparkle (reduced from 15%)
+    static constexpr float SPARKLE_CHANCE = 0.025f;              // 2.5% chance per LED per update to sparkle
     static constexpr float SPARKLE_DECAY = 0.05f;                // How quickly sparkles fade (multiplier per update)
+
+    // White wave overlay parameters for core strip
+    float whiteWavePosition;                         // Current position of the white wave (0.0 to LED_STRIP_CORE_COUNT)
+    static constexpr int WHITE_WAVE_LENGTH = 60;    // Length of the white wave in pixels
+    static constexpr float WHITE_WAVE_SPEED = 0.4f; // Speed of the wave movement (pixels per frame)
+    static constexpr float WHITE_WAVE_BRIGHTNESS = 0.8f; // Maximum brightness of the white wave
 
     /**
      * Get current rainbow color based on the 30-second cycle
@@ -166,6 +172,12 @@ private:
      * Uses current rainbow color with different behaviors per strip type
      */
     void applyBreathingEffect();
+
+    /**
+     * Apply white wave overlay to core strip only
+     * Creates a moving white wave that travels from one end to the other
+     */
+    void applyWhiteWaveOverlay();
 
     /**
      * Update shimmer effect for core, inner, and outer LEDs

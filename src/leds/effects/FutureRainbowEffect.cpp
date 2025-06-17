@@ -15,7 +15,8 @@ FutureRainbowEffect::FutureRainbowEffect(LEDController& ledController) :
     unpredictableBreathingCurrent(0.55f),
     lastBreathingChange(0),
     lastShimmerUpdate(0),
-    lastSparkleUpdate(0)  // Initialize sparkle timing
+    lastSparkleUpdate(0),  // Initialize sparkle timing
+    whiteWavePosition(-WHITE_WAVE_LENGTH) // Start the wave off-screen
 {
     // Reserve space for trails to avoid memory reallocations
     trails.reserve(MAX_TRAILS);
@@ -89,6 +90,7 @@ void FutureRainbowEffect::reset() {
     unpredictableBreathingTarget = 0.55f;
     lastBreathingChange = millis();
     effectStartTime = millis(); // Reset the start time for rainbow cycle
+    whiteWavePosition = -WHITE_WAVE_LENGTH; // Reset wave position
 
     // Reset shimmer values
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
@@ -149,6 +151,9 @@ void FutureRainbowEffect::update() {
 
     // Apply breathing effect on top of trails
     applyBreathingEffect();
+
+    // Apply white wave overlay on top of breathing effect
+    applyWhiteWaveOverlay();
 
     // Show all the changes
     leds.showAll();
@@ -272,62 +277,41 @@ void FutureRainbowEffect::drawTrails() {
                     );
                 }
             } else {
-                // Rest of trail is white with rainbow tint and reduced brightness
-                uint8_t brightness = 255 * fadeRatio * 0.6f; // Reduce white brightness by 40%
-
-                // Add rainbow tint to the white trail
-                // Mix 30% rainbow color with 70% white
+                // Rest of trail fades to white
+                float whiteMix = (float)(i - 2) / (trail.trailLength - 2);
+                uint8_t white = 255 * fadeRatio;
                 color = CRGB(
-                    (brightness * 0.7f) + (rainbowColor.r * 0.3f * fadeRatio),
-                    (brightness * 0.7f) + (rainbowColor.g * 0.3f * fadeRatio),
-                    (brightness * 0.7f) + (rainbowColor.b * 0.3f * fadeRatio)
+                    rainbowColor.r * (1.0f - whiteMix) * fadeRatio + white * whiteMix,
+                    rainbowColor.g * (1.0f - whiteMix) * fadeRatio + white * whiteMix,
+                    rainbowColor.b * (1.0f - whiteMix) * fadeRatio + white * whiteMix
                 );
             }
 
-            // Map logical position to physical LED position
-            int physicalPos = leds.mapPositionToPhysical(trail.stripType, pixelPos, trail.subStrip);
-
-            // Adjust for segment offset
-            if (trail.stripType == 1) {
-                physicalPos += trail.subStrip * INNER_LEDS_PER_STRIP;
-            } else {
-                physicalPos += trail.subStrip * OUTER_LEDS_PER_STRIP;
-            }
-
-            // Set the LED color using additive blending
-            if (trail.stripType == 1) {
-                if (physicalPos >= 0 && physicalPos < LED_STRIP_INNER_COUNT) {
-                    leds.getInner()[physicalPos] += color;
+            // Apply the color to the correct strip
+            if (trail.stripType == 1) { // Inner strips
+                int globalIndex = trail.subStrip * INNER_LEDS_PER_STRIP + pixelPos;
+                if (globalIndex < LED_STRIP_INNER_COUNT) {
+                    leds.getInner()[globalIndex] = color;
                 }
-            } else {
-                if (physicalPos >= 0 && physicalPos < LED_STRIP_OUTER_COUNT) {
-                    leds.getOuter()[physicalPos] += color;
+            } else if (trail.stripType == 2) { // Outer strips
+                int globalIndex = trail.subStrip * OUTER_LEDS_PER_STRIP + pixelPos;
+                if (globalIndex < LED_STRIP_OUTER_COUNT) {
+                    leds.getOuter()[globalIndex] = color;
                 }
             }
         }
     }
+}
 
-    // Apply brightness limiting
-    for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
-        CRGB& pixel = leds.getInner()[i];
-        uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
-        if (maxComponent > 160) {
-            float scale = 160.0f / maxComponent;
-            pixel.r = pixel.r * scale;
-            pixel.g = pixel.g * scale;
-            pixel.b = pixel.b * scale;
-        }
-    }
-
-    for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
-        CRGB& pixel = leds.getOuter()[i];
-        uint8_t maxComponent = max(max(pixel.r, pixel.g), pixel.b);
-        if (maxComponent > 160) {
-            float scale = 160.0f / maxComponent;
-            pixel.r = pixel.r * scale;
-            pixel.g = pixel.g * scale;
-            pixel.b = pixel.b * scale;
-        }
+int FutureRainbowEffect::getStripLength(int stripType) {
+    // Return the number of LEDs in each strip type
+    switch (stripType) {
+        case 1:  // Inner strips
+            return INNER_LEDS_PER_STRIP;
+        case 2:  // Outer strips
+            return OUTER_LEDS_PER_STRIP;
+        default:
+            return 0;
     }
 }
 
@@ -385,17 +369,17 @@ void FutureRainbowEffect::applyBreathingEffect() {
         uint8_t pixelHue = baseHue + hueOffset;
 
         // Create rainbow color for this pixel
-        CRGB rainbowColor = CHSV(pixelHue, 255, 255);
+        CRGB innerRainbowColor = CHSV(pixelHue, 255, 255);
 
-        // Apply shimmer and intensity
+        // Apply shimmer and breathing intensity
         float shimmerMultiplier = innerShimmerValues[i];
         float finalIntensity = innerOuterIntensity * shimmerMultiplier * 1.2f; // Boost by 20%
         finalIntensity = min(0.9f, finalIntensity);
 
         CRGB innerOverlay = CRGB(
-            rainbowColor.r * finalIntensity,
-            rainbowColor.g * finalIntensity,
-            rainbowColor.b * finalIntensity
+            innerRainbowColor.r * finalIntensity,
+            innerRainbowColor.g * finalIntensity,
+            innerRainbowColor.b * finalIntensity
         );
 
         // Blend with existing trail color
@@ -417,9 +401,8 @@ void FutureRainbowEffect::applyBreathingEffect() {
         }
     }
 
-    // Add breathing overlay to outer strips WITH SATURATION CYCLING and gradient
-    uint8_t currentSaturation = getCurrentOuterSaturation();
-
+    // Add unpredictable breathing overlay to outer strips with saturation cycling
+    uint8_t outerSaturation = getCurrentOuterSaturation();
     for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
         // Calculate which segment and position within segment
         int segment = i / OUTER_LEDS_PER_STRIP;
@@ -432,10 +415,10 @@ void FutureRainbowEffect::applyBreathingEffect() {
         uint8_t hueOffset = (uint8_t)((1.0f - positionRatio) * 51); // 20% of 255, reversed
         uint8_t pixelHue = baseHue + hueOffset;
 
-        // Create rainbow color with current saturation
-        CRGB outerRainbowColor = CHSV(pixelHue, currentSaturation, 255);
+        // Create rainbow color with cycling saturation
+        CRGB outerRainbowColor = CHSV(pixelHue, outerSaturation, 255);
 
-        // Apply shimmer and intensity
+        // Apply shimmer and breathing intensity
         float shimmerMultiplier = outerShimmerValues[i];
         float finalIntensity = innerOuterIntensity * shimmerMultiplier * 1.2f; // Boost by 20%
         finalIntensity = min(0.9f, finalIntensity);
@@ -466,132 +449,107 @@ void FutureRainbowEffect::applyBreathingEffect() {
     }
 
     // Add sparkly breathing effect to ring strip
-    if (!skipRing) {
-        updateRingSparkles();
+    updateRingSparkles();
 
-        // Calculate core breathing intensity (10% to 100% for more dramatic effect)
-        float ringBreathingIntensity = 0.1f + (normalizedSine * 0.9f); // 10% to 100% (changed from 20-100%)
+    // Calculate core breathing intensity (10% to 100% for more dramatic effect)
+    float ringBreathingIntensity = 0.1f + (normalizedSine * 0.9f); // 10% to 100%
 
-        // Apply sparkles with random gradient colors to ring
-        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
-            // Generate a random position in the gradient range for this LED
-            float randomPosition = (float)random(100) / 100.0f; // 0.0 to 1.0
-
-            // Calculate hue for this random position (matching the gradient pattern)
-            uint8_t hueOffset = (uint8_t)((1.0f - randomPosition) * 51); // 20% of 255, reversed
-            uint8_t pixelHue = baseHue + hueOffset;
-
-            // Create rainbow color for this pixel
-            CRGB rainbowColor = CHSV(pixelHue, 255, 255);
-
-            // Apply sparkle multiplier AND breathing intensity
-            float sparkleMultiplier = ringSparkleValues[i];
-
-            // Make sparkles affected by breathing - they sparkle within the breathing range
-            // When breathing is low, even sparkles are dim. When breathing is high, sparkles are bright
-            float finalIntensity = ringBreathingIntensity * (0.3f + sparkleMultiplier * 0.7f);
-            // This means: minimum 30% of breathing intensity, up to 100% when sparkling
-
-            // Apply the color with sparkle and breathing
-            CRGB ringColor = CRGB(
-                rainbowColor.r * finalIntensity,
-                rainbowColor.g * finalIntensity,
-                rainbowColor.b * finalIntensity
-            );
-
-            leds.getRing()[i] = ringColor;
-        }
-    }
-}
-
-void FutureRainbowEffect::updateRingSparkles() {
-    unsigned long currentTime = millis();
-
-    // Only update sparkles at specified intervals
-    if (currentTime - lastSparkleUpdate < SPARKLE_UPDATE_INTERVAL) {
-        return;
-    }
-
-    lastSparkleUpdate = currentTime;
-
-    // Update each LED's sparkle state
+    // Apply sparkles with random gradient colors to ring
     for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
-        // Random chance to start a new sparkle (reduced chance)
-        if (ringSparkleValues[i] < 0.1f && random(1000) < (SPARKLE_CHANCE * 1000)) {
-            // Start a new sparkle at full sparkle value (not full brightness anymore)
-            ringSparkleValues[i] = 1.0f;
-        } else {
-            // Decay existing sparkle
-            ringSparkleValues[i] *= SPARKLE_DECAY;
+        // Generate a random position in the gradient range for this LED
+        float randomPosition = (float)random(100) / 100.0f; // 0.0 to 1.0
 
-            // Ensure minimum threshold (consider fully faded below 0.01)
-            if (ringSparkleValues[i] < 0.01f) {
-                ringSparkleValues[i] = 0.0f;
-            }
-        }
+        // Calculate hue for this random position (matching the gradient pattern)
+        uint8_t hueOffset = (uint8_t)((1.0f - randomPosition) * 51); // 20% of 255, reversed
+        uint8_t pixelHue = baseHue + hueOffset;
+
+        // Create rainbow color for this pixel
+        CRGB rainbowColor = CHSV(pixelHue, 255, 255);
+
+        // Apply sparkle multiplier AND breathing intensity
+        float sparkleMultiplier = ringSparkleValues[i];
+
+        // Make sparkles affected by breathing - they sparkle within the breathing range
+        // When breathing is low, even sparkles are dim.
+        // When breathing is high, sparkles are bright
+        float finalIntensity = ringBreathingIntensity * (0.3f + sparkleMultiplier * 0.7f);
+        // This means: minimum 30% of breathing intensity, up to 100% when sparkling
+
+        // Apply the color with sparkle and breathing
+        CRGB ringColor = CRGB(
+            rainbowColor.r * finalIntensity,
+            rainbowColor.g * finalIntensity,
+            rainbowColor.b * finalIntensity
+        );
+
+        leds.getRing()[i] = ringColor;
     }
 }
 
-void FutureRainbowEffect::updateUnpredictableBreathing() {
-    unsigned long currentTime = millis();
+void FutureRainbowEffect::applyWhiteWaveOverlay() {
+    // Update white wave position
+    whiteWavePosition += WHITE_WAVE_SPEED;
 
-    // Randomly change breathing parameters every few seconds
-    if (currentTime - lastBreathingChange > BREATHING_CHANGE_INTERVAL) {
-        lastBreathingChange = currentTime;
-
-        // Randomly change breathing speed
-        unpredictableBreathingSpeed = MIN_BREATHING_SPEED +
-            (random(100) / 100.0f) * (MAX_BREATHING_SPEED - MIN_BREATHING_SPEED);
-
-        // Randomly set a new target brightness (25% to 90%)
-        unpredictableBreathingTarget = 0.25f + (random(66) / 100.0f);
-
-        // Occasionally add a "glitch"
-        if (random(100) < 20) {
-            unpredictableBreathingCurrent = 0.25f + (random(66) / 100.0f);
-        }
+    // Reset wave when it completely passes off the end of the strip
+    if (whiteWavePosition >= LED_STRIP_CORE_COUNT + WHITE_WAVE_LENGTH) {
+        whiteWavePosition = -WHITE_WAVE_LENGTH; // Start from before the beginning
     }
 
-    // Update breathing phase with current speed
-    unpredictableBreathingPhase += unpredictableBreathingSpeed;
-    if (unpredictableBreathingPhase > 2.0f * PI) {
-        unpredictableBreathingPhase -= 2.0f * PI;
-    }
+    // Apply white wave overlay to core strip
+    CRGB* coreStrip = leds.getCore();
 
-    // Calculate base sine wave
-    float sineValue = sin(unpredictableBreathingPhase);
-    float normalizedSine = (sineValue + 1.0f) / 2.0f;
+    // Calculate the wave start and end positions
+    int waveStart = (int)whiteWavePosition;
+    int waveEnd = waveStart + WHITE_WAVE_LENGTH;
 
-    // Mix sine wave with target for unpredictable movement
-    float targetInfluence = 0.3f;
-    float sineInfluence = 0.7f;
+    // Apply white overlay to LEDs within the wave range
+    for (int i = 0; i < WHITE_WAVE_LENGTH; i++) {
+        int ledIndex = waveStart + i;
 
-    float desiredBrightness = (unpredictableBreathingTarget * targetInfluence) +
-                              ((0.25f + normalizedSine * 0.65f) * sineInfluence);
-
-    // Smooth transition to desired brightness
-    float transitionSpeed = 0.05f;
-    if (unpredictableBreathingCurrent < desiredBrightness) {
-        unpredictableBreathingCurrent += transitionSpeed;
-        if (unpredictableBreathingCurrent > desiredBrightness) {
-            unpredictableBreathingCurrent = desiredBrightness;
+        // Skip if LED is outside the strip bounds
+        if (ledIndex < 0 || ledIndex >= LED_STRIP_CORE_COUNT) {
+            continue;
         }
-    } else if (unpredictableBreathingCurrent > desiredBrightness) {
-        unpredictableBreathingCurrent -= transitionSpeed;
-        if (unpredictableBreathingCurrent < desiredBrightness) {
-            unpredictableBreathingCurrent = desiredBrightness;
-        }
-    }
 
-    // Clamp to valid range
-    unpredictableBreathingCurrent = max(0.25f, min(0.9f, unpredictableBreathingCurrent));
+        // Calculate wave progress from 0.0 to 1.0 across the wave length
+        float waveProgress = (float)i / (WHITE_WAVE_LENGTH - 1);
+        float intensity;
+
+        // Create smooth bell curve for natural fading
+        if (waveProgress <= 0.5f) {
+            // First half - fade in
+            float normalizedProgress = waveProgress * 2.0f; // 0.0 to 1.0
+            intensity = normalizedProgress;
+        } else {
+            // Second half - fade out
+            float normalizedProgress = (1.0f - waveProgress) * 2.0f; // 1.0 to 0.0
+            intensity = normalizedProgress;
+        }
+
+        // Apply smooth sine curve for natural bell shape
+        intensity = sin(intensity * PI * 0.5f);
+
+        // Get current LED color
+        CRGB currentColor = coreStrip[ledIndex];
+
+        // Blend between current color and white for visible but natural effect
+        CRGB whiteColor = CRGB::White;
+        float blendAmount = intensity * 0.6f; // 60% white blend at peak
+
+        // Create a blend that brightens while adding some white
+        coreStrip[ledIndex] = CRGB(
+            currentColor.r + (whiteColor.r - currentColor.r) * blendAmount,
+            currentColor.g + (whiteColor.g - currentColor.g) * blendAmount,
+            currentColor.b + (whiteColor.b - currentColor.b) * blendAmount
+        );
+    }
 }
 
 void FutureRainbowEffect::updateShimmer() {
     unsigned long currentTime = millis();
 
     // Only update shimmer at specified intervals
-    if (currentTime - lastShimmerUpdate < SHIMMER_UPDATE_INTERVAL) {
+    if (currentTime - lastShimmerUpdate < 50) { // SHIMMER_UPDATE_INTERVAL
         return;
     }
 
@@ -651,14 +609,85 @@ void FutureRainbowEffect::updateShimmer() {
     }
 }
 
-int FutureRainbowEffect::getStripLength(int stripType) {
-    // Return the number of LEDs in each strip type
-    switch (stripType) {
-        case 1:  // Inner strips
-            return INNER_LEDS_PER_STRIP;
-        case 2:  // Outer strips
-            return OUTER_LEDS_PER_STRIP;
-        default:
-            return 0;
+void FutureRainbowEffect::updateRingSparkles() {
+    unsigned long currentTime = millis();
+
+    // Only update sparkles at specified intervals
+    if (currentTime - lastSparkleUpdate < 50) { // SPARKLE_UPDATE_INTERVAL
+        return;
     }
+
+    lastSparkleUpdate = currentTime;
+
+    // Update each LED's sparkle state
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        // Random chance to start a new sparkle (reduced chance)
+        if (ringSparkleValues[i] < 0.1f && random(1000) < (SPARKLE_CHANCE * 1000)) {
+            // Start a new sparkle at full sparkle value (not full brightness anymore)
+            ringSparkleValues[i] = 1.0f;
+        } else {
+            // Decay existing sparkle
+            ringSparkleValues[i] *= SPARKLE_DECAY;
+
+            // Ensure minimum threshold (consider fully faded below 0.01)
+            if (ringSparkleValues[i] < 0.01f) {
+                ringSparkleValues[i] = 0.0f;
+            }
+        }
+    }
+}
+
+void FutureRainbowEffect::updateUnpredictableBreathing() {
+    unsigned long currentTime = millis();
+
+    // Randomly change breathing parameters every few seconds
+    if (currentTime - lastBreathingChange > 3000) { // BREATHING_CHANGE_INTERVAL
+        lastBreathingChange = currentTime;
+
+        // Randomly change breathing speed
+        unpredictableBreathingSpeed = 0.005f +
+            (random(100) / 100.0f) * (0.02f - 0.005f); // MIN_BREATHING_SPEED to MAX_BREATHING_SPEED
+
+        // Randomly set a new target brightness (25% to 90%)
+        unpredictableBreathingTarget = 0.25f + (random(66) / 100.0f);
+
+        // Occasionally add a "glitch"
+        if (random(100) < 20) {
+            unpredictableBreathingCurrent = 0.25f + (random(66) / 100.0f);
+        }
+    }
+
+    // Update breathing phase with current speed
+    unpredictableBreathingPhase += unpredictableBreathingSpeed;
+    if (unpredictableBreathingPhase > 2.0f * PI) {
+        unpredictableBreathingPhase -= 2.0f * PI;
+    }
+
+    // Calculate base sine wave
+    float sineValue = sin(unpredictableBreathingPhase);
+    float normalizedSine = (sineValue + 1.0f) / 2.0f;
+
+    // Mix sine wave with target for unpredictable movement
+    float targetInfluence = 0.3f;
+    float sineInfluence = 0.7f;
+
+    float desiredBrightness = (unpredictableBreathingTarget * targetInfluence) +
+                              ((0.25f + normalizedSine * 0.65f) * sineInfluence);
+
+    // Smooth transition to desired brightness
+    float transitionSpeed = 0.05f;
+    if (unpredictableBreathingCurrent < desiredBrightness) {
+        unpredictableBreathingCurrent += transitionSpeed;
+        if (unpredictableBreathingCurrent > desiredBrightness) {
+            unpredictableBreathingCurrent = desiredBrightness;
+        }
+    } else if (unpredictableBreathingCurrent > desiredBrightness) {
+        unpredictableBreathingCurrent -= transitionSpeed;
+        if (unpredictableBreathingCurrent < desiredBrightness) {
+            unpredictableBreathingCurrent = desiredBrightness;
+        }
+    }
+
+    // Clamp to valid range (25% to 90%)
+    unpredictableBreathingCurrent = max(0.25f, min(0.9f, unpredictableBreathingCurrent));
 }
