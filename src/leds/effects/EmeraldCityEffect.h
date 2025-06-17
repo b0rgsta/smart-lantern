@@ -120,11 +120,13 @@ private:
     static constexpr float FADE_END_POSITION = 0.9f;          // Complete fade by 90% up the strip
 
     // Core wave effect parameters
+    // Core wave effect parameters
+    // Core wave effect parameters
     float coreWavePosition;                                    // Current position of the wave (0.0 to LED_STRIP_CORE_COUNT)
     static constexpr float CORE_WAVE_SPEED = 0.52f;          // Speed of the wave movement (30% faster: 0.4 -> 0.52)
-    static constexpr int CORE_WAVE_LENGTH = 50;               // Length of the wave in pixels (shorter for less pause: 80 -> 50)
-    static constexpr float CORE_WAVE_BRIGHTNESS = 0.9f;       // Maximum brightness of the wave (more vibrant: 0.7 -> 0.9)
-    static constexpr uint8_t CORE_WAVE_HUE = 105;            // Vibrant blue-green hue (more vibrant: 110 -> 105)
+    static constexpr int CORE_WAVE_LENGTH = 60;               // Length of the wave in pixels (shorter for less pause: 80 -> 50)
+    static constexpr float CORE_WAVE_BRIGHTNESS = 1.0f;       // Maximum brightness of the wave (more vibrant: 0.7 -> 0.9)
+    static constexpr uint8_t CORE_WAVE_HUE = 125;             // Much more blue hue (changed from 95 to 85 for deeper blue)lue)
 
     /**
      * Initialize the green color palette

@@ -128,14 +128,14 @@ void EmeraldCityEffect::initializeStartupTrails() {
             // Random speed and other properties
             trail.speed = MIN_TRAIL_SPEED + (random(100) / 100.0f) * (MAX_TRAIL_SPEED - MIN_TRAIL_SPEED);
             trail.greenHue = getRandomGreenHue();
-            trail.brightness = TRAIL_BRIGHTNESS + random(50);  // Some brightness variation
+            trail.brightness = TRAIL_BRIGHTNESS + random(75);
         }
     }
 
     // Initialize trails for outer strips
     for (int stripIndex = 0; stripIndex < NUM_OUTER_STRIPS; stripIndex++) {
-        // Create 3-5 trails per strip at startup
-        int numStartupTrails = 3 + random(3);  // 3 to 5 trails
+        // Create 2-4 trails per strip at startup
+        int numStartupTrails = 2 + random(3);  // 2 to 4 trails
 
         for (int trailIndex = 0; trailIndex < numStartupTrails && trailIndex < MAX_TRAILS_PER_STRIP; trailIndex++) {
             EmeraldTrail& trail = outerTrails[stripIndex][trailIndex];
@@ -150,27 +150,26 @@ void EmeraldCityEffect::initializeStartupTrails() {
             // Random speed and other properties
             trail.speed = MIN_TRAIL_SPEED + (random(100) / 100.0f) * (MAX_TRAIL_SPEED - MIN_TRAIL_SPEED);
             trail.greenHue = getRandomGreenHue();
-            trail.brightness = TRAIL_BRIGHTNESS + random(50);  // Some brightness variation
+            trail.brightness = TRAIL_BRIGHTNESS + random(75);
         }
     }
-
-    Serial.println("Initialized startup trails for immediate visual effect");
 }
 
 void EmeraldCityEffect::reset() {
-    // Reset all trails to inactive
+    // Deactivate all trails
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
         for (auto& trail : innerTrails[i]) {
             trail.isActive = false;
         }
     }
+
     for (int i = 0; i < NUM_OUTER_STRIPS; i++) {
         for (auto& trail : outerTrails[i]) {
             trail.isActive = false;
         }
     }
 
-    // Reset all sparkle values to 0.0 (no sparkles) and randomize colors and brightness
+    // Reset all sparkle values
     for (int i = 0; i < LED_STRIP_INNER_COUNT; i++) {
         innerSparkleValues[i] = 0.0f;
         innerSparkleColors[i] = random(2);  // Randomize color again
@@ -186,10 +185,6 @@ void EmeraldCityEffect::reset() {
         ringSparkleColors[i] = random(2);  // Randomize color again
         ringSparkleBrightness[i] = 0.2f + (random(80) / 100.0f);  // Random brightness 20% to 100%
     }
-
-    // Reset core glow - REMOVED (core should stay off)
-    // coreGlowIntensity = 0.8f;
-    // coreGlowPhase = 0.0f;
 
     // Reset timing
     lastUpdateTime = millis();
@@ -223,7 +218,7 @@ void EmeraldCityEffect::update() {
     // Apply fade-to-black overlay to outer strips for ambient effect
     applyOuterFadeOverlay();
 
-    // Apply blue-green wave effect to core strip
+    // Apply blue wave effect to core strip
     applyCoreWaveEffect();
 
     // Apply moving black fade to inner strips that follows the core wave
@@ -261,6 +256,7 @@ void EmeraldCityEffect::applyRingGreenOverlay() {
         leds.getRing()[i] = glowColor;
     }
 }
+
 void EmeraldCityEffect::updateInnerTrails() {
     // Update trails for each inner strip
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
@@ -349,15 +345,18 @@ void EmeraldCityEffect::applyInnerWaveFade() {
             pixel.b = (uint8_t)(pixel.b * fadeMultiplier);
         }
     }
-}void EmeraldCityEffect::applyCoreWaveEffect() {
-    // Apply a large blue-green wave that moves across the entire core strip
+}
+
+void EmeraldCityEffect::applyCoreWaveEffect() {
+    // Apply a large blue wave that moves across the entire core strip
     // Wave fades in and out with center being brightest
 
     // Update wave position
     coreWavePosition += CORE_WAVE_SPEED;
 
-    // Reset wave position when it moves completely off the strip
-    if (coreWavePosition > LED_STRIP_CORE_COUNT + CORE_WAVE_LENGTH) {
+    // Reset wave position for shorter gaps between waves
+    // Instead of waiting for full wave + length, reset sooner for more frequent waves
+    if (coreWavePosition > LED_STRIP_CORE_COUNT + (CORE_WAVE_LENGTH * 0.3f)) {
         coreWavePosition = -CORE_WAVE_LENGTH;  // Start from before the beginning
     }
 
@@ -518,7 +517,7 @@ void EmeraldCityEffect::updateSparkles() {
         if (innerSparkleValues[i] <= 0.0f) {
             if (random(1000) < (INNER_OUTER_SPARKLE_CHANCE * 1000)) {
                 innerSparkleValues[i] = 0.01f;  // Start the fade cycle
-                innerSparkleColors[i] = random(2);  // Choose new random color
+                innerSparkleColors[i] = random(2);  // Random color: 0=white, 1=light green
                 innerSparkleBrightness[i] = 0.2f + (random(80) / 100.0f);  // New random brightness 20% to 100%
                 // New random speed for this sparkle: 50% to 200% of base speed
                 innerSparkleSpeed[i] = BASE_SPARKLE_SPEED * (MIN_SPEED_MULTIPLIER + (random(150) / 100.0f));
@@ -565,13 +564,13 @@ void EmeraldCityEffect::updateSparkles() {
         }
     }
 
-    // Update sparkles for outer strips (same smooth sine logic)
+    // Update sparkles for outer strips - same smooth sine logic
     for (int i = 0; i < LED_STRIP_OUTER_COUNT; i++) {
         // If not currently sparkling, random chance to start (50% less for inner/outer)
         if (outerSparkleValues[i] <= 0.0f) {
             if (random(1000) < (INNER_OUTER_SPARKLE_CHANCE * 1000)) {
                 outerSparkleValues[i] = 0.01f;  // Start the fade cycle
-                outerSparkleColors[i] = random(2);  // Choose new random color
+                outerSparkleColors[i] = random(2);  // Random color: 0=white, 1=light green
                 outerSparkleBrightness[i] = 0.2f + (random(80) / 100.0f);  // New random brightness 20% to 100%
                 // New random speed for this sparkle: 50% to 200% of base speed
                 outerSparkleSpeed[i] = BASE_SPARKLE_SPEED * (MIN_SPEED_MULTIPLIER + (random(150) / 100.0f));
@@ -618,59 +617,57 @@ void EmeraldCityEffect::updateSparkles() {
         }
     }
 
-    // Update sparkles for ring strip (if not skipped) - same smooth sine logic
-    if (!skipRing) {
-        for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
-            // If not currently sparkling, random chance to start (unchanged for ring)
-            if (ringSparkleValues[i] <= 0.0f) {
-                if (random(1000) < (RING_SPARKLE_CHANCE * 1000)) {
-                    ringSparkleValues[i] = 0.01f;  // Start the fade cycle
-                    // Ring sparkles: 75% green, 25% white
-                    ringSparkleColors[i] = (random(100) < 75) ? 1 : 0;  // 75% chance for green (1), 25% for white (0)
-                    ringSparkleBrightness[i] = 0.2f + (random(80) / 100.0f);  // New random brightness 20% to 100%
-                    // New random speed for ring sparkle: slower (25% to 50% of base speed)
-                    ringSparkleSpeed[i] = BASE_SPARKLE_SPEED * RING_SPEED_MULTIPLIER * (MIN_SPEED_MULTIPLIER + (random(100) / 100.0f));
-                }
+    // Update sparkles for ring strip - same smooth sine logic
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        // If not currently sparkling, random chance to start (unchanged for ring)
+        if (ringSparkleValues[i] <= 0.0f) {
+            if (random(1000) < (RING_SPARKLE_CHANCE * 1000)) {
+                ringSparkleValues[i] = 0.01f;  // Start the fade cycle
+                // Ring sparkles: 75% green, 25% white
+                ringSparkleColors[i] = (random(100) < 75) ? 1 : 0;  // 75% chance for green (1), 25% for white (0)
+                ringSparkleBrightness[i] = 0.2f + (random(80) / 100.0f);  // New random brightness 20% to 100%
+                // New random speed for ring sparkle: slower (25% to 50% of base speed)
+                ringSparkleSpeed[i] = BASE_SPARKLE_SPEED * RING_SPEED_MULTIPLIER * (MIN_SPEED_MULTIPLIER + (random(100) / 100.0f));
             }
-            // If currently sparkling, use individual speed for fade (slower for ring)
-            else {
-                ringSparkleValues[i] += ringSparkleSpeed[i];  // Use individual sparkle's slower speed
+        }
+        // If currently sparkling, use individual speed for fade (slower for ring)
+        else {
+            ringSparkleValues[i] += ringSparkleSpeed[i];  // Use individual sparkle's slower speed
 
-                // Use sine wave for smooth fade in and out with more gradual curves
-                float phase = ringSparkleValues[i];
-                float sineValue;
+            // Use sine wave for smooth fade in and out with more gradual curves
+            float phase = ringSparkleValues[i];
+            float sineValue;
 
-                // Create a more gradual fade by using a modified sine curve
-                if (phase <= PI) {
-                    // Use a smoother curve: sin^2 for more gradual fade in/out
-                    float baseSine = sin(phase);
-                    sineValue = baseSine * baseSine;  // Squaring makes the fade more gradual
+            // Create a more gradual fade by using a modified sine curve
+            if (phase <= PI) {
+                // Use a smoother curve: sin^2 for more gradual fade in/out
+                float baseSine = sin(phase);
+                sineValue = baseSine * baseSine;  // Squaring makes the fade more gradual
+            } else {
+                // Sparkle cycle complete, turn off
+                ringSparkleValues[i] = 0.0f;
+                sineValue = 0.0f;
+            }
+
+            // Apply sparkle color if active
+            if (sineValue > 0.0f) {
+                CRGB sparkleColor;
+                // Use the individual sparkle's random brightness level
+                float intensity = sineValue * ringSparkleBrightness[i];
+
+                if (ringSparkleColors[i] == 0) {
+                    // White sparkle (more vibrant)
+                    uint8_t brightValue = (uint8_t)(255 * intensity);
+                    sparkleColor = CRGB(brightValue, brightValue, brightValue);
                 } else {
-                    // Sparkle cycle complete, turn off
-                    ringSparkleValues[i] = 0.0f;
-                    sineValue = 0.0f;
+                    // Light green sparkle (much more vibrant - increased saturation and brightness)
+                    uint8_t brightValue = (uint8_t)(255 * intensity * 1.3f);  // 30% brighter
+                    if (brightValue > 255) brightValue = 255;  // Cap at maximum
+                    sparkleColor = CRGB(brightValue * 0.2f, brightValue, brightValue * 0.4f);  // More vibrant green ratio
                 }
 
-                // Apply sparkle color if active
-                if (sineValue > 0.0f) {
-                    CRGB sparkleColor;
-                    // Use the individual sparkle's random brightness level
-                    float intensity = sineValue * ringSparkleBrightness[i];
-
-                    if (ringSparkleColors[i] == 0) {
-                        // White sparkle (more vibrant)
-                        uint8_t brightValue = (uint8_t)(255 * intensity);
-                        sparkleColor = CRGB(brightValue, brightValue, brightValue);
-                    } else {
-                        // Light green sparkle (much more vibrant - increased saturation and brightness)
-                        uint8_t brightValue = (uint8_t)(255 * intensity * 1.3f);  // 30% brighter
-                        if (brightValue > 255) brightValue = 255;  // Cap at maximum
-                        sparkleColor = CRGB(brightValue * 0.2f, brightValue, brightValue * 0.4f);  // More vibrant green ratio
-                    }
-
-                    // Set ring color (since ring doesn't have base trails, just sparkles)
-                    leds.getRing()[i] = sparkleColor;
-                }
+                // Add to existing ring color (additive with base green glow)
+                leds.getRing()[i] += sparkleColor;
             }
         }
     }
@@ -689,27 +686,29 @@ void EmeraldCityEffect::applyOuterFadeOverlay() {
     // Apply fade to all 3 outer strip segments
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
         for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
-            // Calculate physical LED position for this segment
-            int physicalPos = i + (segment * OUTER_LEDS_PER_STRIP);
+            // Calculate position ratio (0.0 at bottom, 1.0 at top)
+            float positionRatio = (float)i / (OUTER_LEDS_PER_STRIP - 1);
 
-            // Calculate position along the strip (0.0 = bottom, 1.0 = top)
-            float position = (float)i / (float)OUTER_LEDS_PER_STRIP;
-
-            // Calculate fade multiplier based on position
+            // Create fade multiplier based on position
             float fadeMultiplier = 1.0f;  // Default to full brightness
 
-            if (position >= FADE_START_POSITION) {
-                if (position >= FADE_END_POSITION) {
-                    // Fade to 90% black (10% brightness remaining)
-                    fadeMultiplier = 0.1f;
-                } else {
-                    // Gradual fade from FADE_START_POSITION to FADE_END_POSITION
-                    float fadeProgress = (position - FADE_START_POSITION) / (FADE_END_POSITION - FADE_START_POSITION);
-                    fadeMultiplier = 1.0f - (fadeProgress * 0.9f);  // 1.0 to 0.1 (90% fade)
-                }
+            // Only fade if above the start position
+            if (positionRatio > FADE_START_POSITION) {
+                // Calculate fade progress (0.0 at start, 1.0 at end)
+                float fadeProgress = (positionRatio - FADE_START_POSITION) / (FADE_END_POSITION - FADE_START_POSITION);
+
+                // Clamp fade progress to [0.0, 1.0]
+                fadeProgress = min(1.0f, max(0.0f, fadeProgress));
+
+                // Apply exponential fade for smooth gradient
+                float exponentialFade = fadeProgress * fadeProgress;  // Square for smoother fade
+                fadeMultiplier = 1.0f - (exponentialFade * 0.9f);  // Fade to 10% brightness, not complete black
             }
 
-            // Apply fade multiplier to the outer LED
+            // Calculate physical LED position
+            int physicalPos = i + (segment * OUTER_LEDS_PER_STRIP);
+
+            // Apply fade to the LED
             CRGB& pixel = leds.getOuter()[physicalPos];
             pixel.r = (uint8_t)(pixel.r * fadeMultiplier);
             pixel.g = (uint8_t)(pixel.g * fadeMultiplier);
@@ -719,13 +718,10 @@ void EmeraldCityEffect::applyOuterFadeOverlay() {
 }
 
 int EmeraldCityEffect::getStripLength(int stripType) {
-    // Return the length of strips based on type
-    switch (stripType) {
-        case 1:  // Inner
-            return INNER_LEDS_PER_STRIP;
-        case 2:  // Outer
-            return OUTER_LEDS_PER_STRIP;
-        default:
-            return 0;
+    if (stripType == 1) {  // Inner
+        return INNER_LEDS_PER_STRIP;
+    } else if (stripType == 2) {  // Outer
+        return OUTER_LEDS_PER_STRIP;
     }
+    return 0;
 }
