@@ -81,9 +81,9 @@ private:
     LEDController& leds;                // Reference to LED controller
 
     // Button face LED range on ring strip (our "display" area)
-    static const int BUTTON_FACE_START = 38;    // First LED of button face
-    static const int BUTTON_FACE_END = 55;      // Last LED of button face
-    static const int BUTTON_FACE_COUNT = 18;    // Total LEDs in button face (55-38+1)
+    static const int BUTTON_FACE_START = 11;    // First LED of button face
+    static const int BUTTON_FACE_END = 22;      // Last LED of button face
+    static const int BUTTON_FACE_COUNT = 12;    // Total LEDs in button face (55-38+1)
 
     // Feedback timing
     unsigned long feedbackStartTime;    // When current feedback started

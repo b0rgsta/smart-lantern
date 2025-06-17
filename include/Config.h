@@ -25,7 +25,7 @@
 // LED Strip Definitions
 #define NUM_INNER_STRIPS       3     // Number of inner strip sections
 #define NUM_OUTER_STRIPS       3     // Number of outer strip sections
-#define INNER_LEDS_PER_STRIP   29    // 28 LEDs per inner strip section
+#define INNER_LEDS_PER_STRIP   28    // 28 LEDs per inner strip section
 #define OUTER_LEDS_PER_STRIP   24    // 24 LEDs per outer strip section
 
 // Total LED counts (calculated)

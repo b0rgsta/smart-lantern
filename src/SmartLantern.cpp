@@ -19,21 +19,31 @@
 
 
 
-SmartLantern::SmartLantern() : isPowerOn(false),
-                               isAutoOn(false),
-                               currentMode(MODE_AMBIENT),
-                               currentEffect(0),
-                               tempButtonState(0),
-                               lightButtonState(0),
-                               powerButtonPressTime(0),
-                               lowLightStartTime(0),
-                               autoOnTime(0),
-                               isWindingDown(false), // Initialize wind-down state
-                               windDownPosition(0), // Start wind-down position
-                               lastWindDownTime(0), // Initialize timing
-                               lastModeChangeTime(0), // Initialize mode debounce timing
-                               lastEffectChangeTime(0), // Initialize effect debounce timing
-                               buttonFeedback(leds) {
+SmartLantern::SmartLantern() :
+    buttonFeedback(leds),
+    isPowerOn(false),
+    isAutoOn(false),
+    currentMode(MODE_AMBIENT),
+    currentEffect(0),
+    tempButtonState(0),
+    lightButtonState(0),
+    isWindingDown(false),
+    windDownPosition(0),
+    lastWindDownTime(0),
+    powerButtonPressTime(0),
+    lowLightStartTime(0),
+    autoOnTime(0),
+    // Initialize button hold timing variables
+    tempButtonPressTime(0),
+    lightButtonPressTime(0),
+    modeButtonPressTime(0),
+    effectButtonPressTime(0),
+    // Initialize button hold state tracking variables
+    tempButtonToggled(false),
+    lightButtonToggled(false),
+    modeButtonToggled(false),
+    effectButtonToggled(false)
+{
     // Initialize the effects vector structure
     effects.resize(5); // One vector for each mode (0-4)
 
@@ -250,9 +260,6 @@ void SmartLantern::update() {
     // Update sensors
     sensors.update();
 
-    // Update button feedback handler
-    buttonFeedback.update();
-
     // Update brightness based on TOF sensor (only when powered on)
     if (isPowerOn) {
         updateBrightnessFromTOF();
@@ -271,6 +278,11 @@ void SmartLantern::update() {
         // Update the current effect normally
         updateEffects();
     }
+
+    // IMPORTANT: Update button feedback AFTER effects are drawn
+    // This ensures button feedback stays visible for the full duration
+    // and isn't cleared early by the effects
+    buttonFeedback.update();
 }
 
 void SmartLantern::setMode(LanternMode mode) {
@@ -392,58 +404,185 @@ void SmartLantern::updateEffects() {
 }
 
 void SmartLantern::processTouchInputs() {
-    // Static variable to track if we've already toggled during this button press
-    static bool hasToggled = false;
+    // Static variable to track if power button has already toggled during this button press
+    static bool powerHasToggled = false;
 
-    // Check for temperature button
-    if (sensors.isNewTouch(TEMP_BUTTON_CHANNEL)) {
-        tempButtonState = (tempButtonState + 1) % 4; // Cycle through states 0-3
+    // === TEMPERATURE BUTTON HANDLING ===
 
-        // Save temperature button state
-        preferences.putUChar("tempBtn", tempButtonState);
+    // Check if temperature button is currently being touched
+    if (sensors.isTouched(TEMP_BUTTON_CHANNEL)) {
+        // If this is the start of a new touch session (button wasn't toggled yet)
+        if (!tempButtonToggled) {
+            // First time we detect touch - start the timer
+            if (tempButtonPressTime == 0) {
+                tempButtonPressTime = millis();
+                Serial.println("DEBUG: Temperature button touch started - beginning hold timer");
+            }
 
-        // Show visual feedback on ring LEDs
-        buttonFeedback.showTemperatureState(tempButtonState);
+            unsigned long currentHoldTime = millis() - tempButtonPressTime;
 
-        Serial.print("Temperature button state: ");
-        Serial.println(tempButtonState);
+            // Check if we've reached the 1/4-second threshold
+            if (currentHoldTime >= BUTTON_HOLD_TIME) {
+                tempButtonState = (tempButtonState + 1) % 4; // Cycle through states 0-3
+                tempButtonToggled = true; // Prevent multiple toggles during same hold
+
+                // Save temperature button state
+                preferences.putUChar("tempBtn", tempButtonState);
+
+                // Show visual feedback on ring LEDs
+                buttonFeedback.showTemperatureState(tempButtonState);
+
+                Serial.print("Temperature button held for 1/4 second - state: ");
+                Serial.println(tempButtonState);
+            }
+        }
+    } else {
+        // Button is not touched - reset for next touch session
+        if (tempButtonToggled || tempButtonPressTime > 0) {
+            Serial.println("DEBUG: Temperature button released - resetting for next touch");
+        }
+        tempButtonPressTime = 0;
+        tempButtonToggled = false;
     }
 
-    if (sensors.isNewTouch(LIGHT_BUTTON_CHANNEL)) {
-        lightButtonState = (lightButtonState + 1) % 4; // Cycle through states 0-3
+    // === LIGHT BUTTON HANDLING ===
 
-        // Save light sensitivity button state
-        preferences.putUChar("lightBtn", lightButtonState);
+    // Check if light button is currently being touched
+    if (sensors.isTouched(LIGHT_BUTTON_CHANNEL)) {
+        // If this is the start of a new touch session (button wasn't toggled yet)
+        if (!lightButtonToggled) {
+            // First time we detect touch - start the timer
+            if (lightButtonPressTime == 0) {
+                lightButtonPressTime = millis();
+                Serial.println("DEBUG: Light button touch started - beginning hold timer");
+            }
 
-        // Show visual feedback on ring LEDs
-        buttonFeedback.showLightState(lightButtonState);
+            unsigned long currentHoldTime = millis() - lightButtonPressTime;
 
-        // Debug output with clear state names
-        String stateNames[] = {"OFF", "LOW", "MEDIUM", "HIGH"};
-        Serial.print("Light sensitivity changed to: ");
-        Serial.print(stateNames[lightButtonState]);
-        Serial.print(" (state ");
-        Serial.print(lightButtonState);
-        Serial.println(")");
+            // Check if we've reached the 1/4-second threshold
+            if (currentHoldTime >= BUTTON_HOLD_TIME) {
+                lightButtonState = (lightButtonState + 1) % 4; // Cycle through states 0-3
+                lightButtonToggled = true; // Prevent multiple toggles during same hold
 
-        // Reset timer when sensitivity changes
-        lowLightStartTime = 0;
-        Serial.println("Light sensor timer reset due to sensitivity change");
+                // Save light sensitivity button state
+                preferences.putUChar("lightBtn", lightButtonState);
+
+                // Show visual feedback on ring LEDs
+                buttonFeedback.showLightState(lightButtonState);
+
+                // Debug output with clear state names
+                String stateNames[] = {"OFF", "LOW", "MEDIUM", "HIGH"};
+                Serial.print("Light button held for 1/4 second - state: ");
+                Serial.print(stateNames[lightButtonState]);
+                Serial.print(" (");
+                Serial.print(lightButtonState);
+                Serial.println(")");
+
+                // Reset timer when sensitivity changes
+                lowLightStartTime = 0;
+                Serial.println("Light sensor timer reset due to sensitivity change");
+            }
+        }
+    } else {
+        // Button is not touched - reset for next touch session
+        if (lightButtonToggled || lightButtonPressTime > 0) {
+            Serial.println("DEBUG: Light button released - resetting for next touch");
+        }
+        lightButtonPressTime = 0;
+        lightButtonToggled = false;
     }
 
-    // Check for power button press (start of touch)
+    // === MODE BUTTON HANDLING (only works when powered on) ===
+
+    // === MODE BUTTON HANDLING (only works when powered on) ===
+
+    // Check if mode button is currently being touched and power is on
+    if (sensors.isTouched(MODE_BUTTON_CHANNEL) && isPowerOn) {
+        // If this is the start of a new touch session (button wasn't toggled yet)
+        if (!modeButtonToggled) {
+            // First time we detect touch - start the timer
+            if (modeButtonPressTime == 0) {
+                modeButtonPressTime = millis();
+                Serial.println("DEBUG: Mode button touch started - beginning hold timer");
+            }
+
+            unsigned long currentHoldTime = millis() - modeButtonPressTime;
+
+            // Check if we've reached the 1/4-second threshold
+            if (currentHoldTime >= BUTTON_HOLD_TIME) {
+                nextMode();
+                modeButtonToggled = true; // Prevent multiple toggles during same hold
+
+                // Show visual feedback for mode selection
+                // We have 4 modes (1-4, skipping MODE_OFF which is 0)
+                int displayMode = currentMode - 1; // Convert to 0-based index (MODE_AMBIENT=1 becomes 0, etc.)
+                buttonFeedback.showModeSelection(displayMode, 4); // 4 total modes to display
+
+                Serial.print("Mode button held for 1/4 second - mode: ");
+                Serial.println(currentMode);
+            }
+        }
+    } else {
+        // Button is not touched OR power is off - reset for next touch session
+        if (modeButtonToggled || modeButtonPressTime > 0) {
+            Serial.println("DEBUG: Mode button released - resetting for next touch");
+        }
+        modeButtonPressTime = 0;
+        modeButtonToggled = false;
+    }
+
+    // === EFFECT BUTTON HANDLING (only works when powered on) ===
+
+    // Check if effect button is currently being touched and power is on
+    if (sensors.isTouched(EFFECT_BUTTON_CHANNEL) && isPowerOn) {
+        // If this is the start of a new touch session (button wasn't toggled yet)
+        if (!effectButtonToggled) {
+            // First time we detect touch - start the timer
+            if (effectButtonPressTime == 0) {
+                effectButtonPressTime = millis();
+                Serial.println("DEBUG: Effect button touch started - beginning hold timer");
+            }
+
+            unsigned long currentHoldTime = millis() - effectButtonPressTime;
+
+            // Check if we've reached the 1/4-second threshold
+            if (currentHoldTime >= BUTTON_HOLD_TIME) {
+                nextEffect();
+                effectButtonToggled = true; // Prevent multiple toggles during same hold
+
+                // Show visual feedback for effect selection
+                // Get the number of effects available for the current mode
+                int numEffects = effects[currentMode].size();
+                buttonFeedback.showEffectSelection(currentEffect, numEffects);
+
+                Serial.print("Effect button held for 1/4 second - effect: ");
+                Serial.println(currentEffect);
+            }
+        }
+    } else {
+        // Button is not touched OR power is off - reset for next touch session
+        if (effectButtonToggled || effectButtonPressTime > 0) {
+            Serial.println("DEBUG: Effect button released - resetting for next touch");
+        }
+        effectButtonPressTime = 0;
+        effectButtonToggled = false;
+    }
+
+    // === POWER BUTTON HANDLING (uses existing 2-second hold logic) ===
+
+    // Check for power button press (start of touch) - keep using isNewTouch for power since it works
     if (sensors.isNewTouch(POWER_BUTTON_CHANNEL)) {
         powerButtonPressTime = millis(); // Record press time for hold detection
-        hasToggled = false; // Reset toggle flag for new press
+        powerHasToggled = false; // Reset toggle flag for new press
 
         // If lantern is currently OFF, turn it ON with a simple touch
         if (!isPowerOn) {
             setPower(true); // Turn on immediately
-            hasToggled = true; // Mark that we've already acted on this press
+            powerHasToggled = true; // Mark that we've already acted on this press
             Serial.println("Power button touched - turning ON");
         } else {
             // If lantern is ON, we need to wait for a hold to turn it OFF
-            Serial.println("Power button pressed - starting hold timer for OFF");
+            Serial.println("DEBUG: Power button pressed - starting hold timer for OFF");
         }
     }
 
@@ -452,9 +591,9 @@ void SmartLantern::processTouchInputs() {
         unsigned long currentHoldTime = millis() - powerButtonPressTime;
 
         // Check if we've reached the 2-second threshold for turning OFF
-        if (currentHoldTime >= POWER_BUTTON_HOLD_TIME && !hasToggled) {
+        if (currentHoldTime >= POWER_BUTTON_HOLD_TIME && !powerHasToggled) {
             setPower(false); // Turn off after 2-second hold
-            hasToggled = true; // Prevent multiple toggles during same hold
+            powerHasToggled = true; // Prevent multiple toggles during same hold
             Serial.println("Power button held for 2 seconds - turning OFF");
         }
     }
@@ -464,43 +603,11 @@ void SmartLantern::processTouchInputs() {
         unsigned long pressDuration = millis() - powerButtonPressTime;
 
         // If released before 2 seconds while lantern was ON and haven't toggled, do nothing
-        if (pressDuration < POWER_BUTTON_HOLD_TIME && !hasToggled && isPowerOn) {
-            Serial.println("Power button released early while ON - no action (need to hold to turn OFF)");
+        if (pressDuration < POWER_BUTTON_HOLD_TIME && !powerHasToggled && isPowerOn) {
+            Serial.println("DEBUG: Power button released early while ON - no action (need to hold to turn OFF)");
         }
 
-        // Note: hasToggled will be reset on next button press
-    }
-
-    // Check for mode button (only works when powered on)
-    if (sensors.isNewTouch(MODE_BUTTON_CHANNEL) && isPowerOn) {
-        unsigned long currentTime = millis();
-
-        // Check if enough time has passed since last mode change (debouncing)
-        if (currentTime - lastModeChangeTime >= BUTTON_DEBOUNCE_TIME) {
-            nextMode();
-            lastModeChangeTime = currentTime; // Update the last change time
-
-            // Show visual feedback for mode selection
-            // We have 4 modes (1-4, skipping MODE_OFF which is 0)
-            int displayMode = currentMode - 1; // Convert to 0-based index (MODE_AMBIENT=1 becomes 0, etc.)
-            buttonFeedback.showModeSelection(displayMode, 4); // 4 total modes to display
-        }
-    }
-
-    // Check for effect button (only works when powered on)
-    if (sensors.isNewTouch(EFFECT_BUTTON_CHANNEL) && isPowerOn) {
-        unsigned long currentTime = millis();
-
-        // Check if enough time has passed since last effect change (debouncing)
-        if (currentTime - lastEffectChangeTime >= BUTTON_DEBOUNCE_TIME) {
-            nextEffect();
-            lastEffectChangeTime = currentTime; // Update the last change time
-
-            // Show visual feedback for effect selection
-            // Get the number of effects available for the current mode
-            int numEffects = effects[currentMode].size();
-            buttonFeedback.showEffectSelection(currentEffect, numEffects);
-        }
+        // Note: powerHasToggled will be reset on next button press
     }
 }
 

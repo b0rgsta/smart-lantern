@@ -460,30 +460,7 @@ void FireEffect::renderFire() {
     }
 
     // FORCE-ON TEST for third outer strip with updated fade
-    if (true) {
-        for (int i = 0; i < 10; i++) {
-            int segment = 2; // Third segment
-            int physicalPos = i + segment * OUTER_LEDS_PER_STRIP;
 
-            // Set to bright red
-            CRGB testColor = CRGB(255, 0, 0);
-
-            // Apply the same more obvious fade logic to the test strip
-            float fadeStartPosition = OUTER_LEDS_PER_STRIP * 0.15f;
-
-            if (i >= fadeStartPosition) {
-                float fadeProgress = (float(i) - fadeStartPosition) / (OUTER_LEDS_PER_STRIP - fadeStartPosition);
-                fadeProgress = fadeProgress * fadeProgress; // More aggressive fade
-                float fadeFactor = 1.0f - fadeProgress;
-
-                testColor.r = testColor.r * fadeFactor;
-                testColor.g = testColor.g * fadeFactor;
-                testColor.b = testColor.b * fadeFactor;
-            }
-
-            leds.getOuter()[physicalPos] = testColor;
-        }
-    }
 }
 
 int FireEffect::mapLEDPosition(int stripType, int position, int subStrip) {
