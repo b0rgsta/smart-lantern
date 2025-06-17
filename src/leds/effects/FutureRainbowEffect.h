@@ -120,15 +120,15 @@ private:
     // Ring sparkle effect variables
     float* ringSparkleValues;           // Array to store sparkle state for each ring LED (0.0 to 1.0)
     unsigned long lastSparkleUpdate;    // When sparkles were last updated
-    static constexpr unsigned long SPARKLE_UPDATE_INTERVAL = 50;  // Update sparkles every 50ms
+    static constexpr unsigned long SPARKLE_UPDATE_INTERVAL = 150;  // Update sparkles every 150ms (3x slower)
     static constexpr float SPARKLE_CHANCE = 0.025f;              // 2.5% chance per LED per update to sparkle
     static constexpr float SPARKLE_DECAY = 0.05f;                // How quickly sparkles fade (multiplier per update)
 
-    // White wave overlay parameters for core strip
-    float whiteWavePosition;                         // Current position of the white wave (0.0 to LED_STRIP_CORE_COUNT)
-    static constexpr int WHITE_WAVE_LENGTH = 60;    // Length of the white wave in pixels
+    // Rainbow gradient wave overlay parameters for core strip
+    float whiteWavePosition;                         // Current position of the rainbow wave (0.0 to LED_STRIP_CORE_COUNT)
+    static constexpr int WHITE_WAVE_LENGTH = 60;    // Length of the rainbow wave in pixels
     static constexpr float WHITE_WAVE_SPEED = 0.4f; // Speed of the wave movement (pixels per frame)
-    static constexpr float WHITE_WAVE_BRIGHTNESS = 0.8f; // Maximum brightness of the white wave
+    static constexpr float WHITE_WAVE_BRIGHTNESS = 0.8f; // Maximum brightness of the rainbow wave
 
     /**
      * Get current rainbow color based on the 30-second cycle
@@ -174,8 +174,8 @@ private:
     void applyBreathingEffect();
 
     /**
-     * Apply white wave overlay to core strip only
-     * Creates a moving white wave that travels from one end to the other
+     * Apply rainbow gradient wave overlay to core strip only
+     * Creates a moving rainbow gradient wave that travels from one end to the other
      */
     void applyWhiteWaveOverlay();
 

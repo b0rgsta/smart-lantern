@@ -495,14 +495,17 @@ void FutureRainbowEffect::applyWhiteWaveOverlay() {
         whiteWavePosition = -WHITE_WAVE_LENGTH; // Start from before the beginning
     }
 
-    // Apply white wave overlay to core strip
+    // Apply rainbow gradient wave overlay to core strip
     CRGB* coreStrip = leds.getCore();
+
+    // Calculate base hue for the gradient (same as inner/outer strips)
+    uint8_t baseHue = (uint8_t)(rainbowPhase * 255);
 
     // Calculate the wave start and end positions
     int waveStart = (int)whiteWavePosition;
     int waveEnd = waveStart + WHITE_WAVE_LENGTH;
 
-    // Apply white overlay to LEDs within the wave range
+    // Apply rainbow gradient wave overlay to LEDs within the wave range
     for (int i = 0; i < WHITE_WAVE_LENGTH; i++) {
         int ledIndex = waveStart + i;
 
@@ -529,18 +532,27 @@ void FutureRainbowEffect::applyWhiteWaveOverlay() {
         // Apply smooth sine curve for natural bell shape
         intensity = sin(intensity * PI * 0.5f);
 
+        // Calculate position ratio for this LED in the core strip (same as inner/outer)
+        float positionRatio = (float)ledIndex / (LED_STRIP_CORE_COUNT - 1);
+
+        // Calculate hue offset for this position (REVERSED - same as inner/outer strips)
+        uint8_t hueOffset = (uint8_t)((1.0f - positionRatio) * 51); // 20% of 255, reversed
+        uint8_t pixelHue = baseHue + hueOffset;
+
+        // Create rainbow color for this position (matching inner/outer gradient)
+        CRGB gradientColor = CHSV(pixelHue, 255, 255);
+
         // Get current LED color
         CRGB currentColor = coreStrip[ledIndex];
 
-        // Blend between current color and white for visible but natural effect
-        CRGB whiteColor = CRGB::White;
-        float blendAmount = intensity * 0.6f; // 60% white blend at peak
+        // Blend current color toward the enhanced gradient color
+        float blendAmount = intensity * 0.6f; // 60% gradient color blend at peak
 
-        // Create a blend that brightens while adding some white
+        // Create a blend that enhances the rainbow gradient
         coreStrip[ledIndex] = CRGB(
-            currentColor.r + (whiteColor.r - currentColor.r) * blendAmount,
-            currentColor.g + (whiteColor.g - currentColor.g) * blendAmount,
-            currentColor.b + (whiteColor.b - currentColor.b) * blendAmount
+            currentColor.r + (gradientColor.r - currentColor.r) * blendAmount,
+            currentColor.g + (gradientColor.g - currentColor.g) * blendAmount,
+            currentColor.b + (gradientColor.b - currentColor.b) * blendAmount
         );
     }
 }
