@@ -12,12 +12,11 @@
 #include "leds/effects/RainbowTranceEffect.h"
 #include "leds/effects/PartyFireEffect.h"
 #include "leds/effects/TemperatureColorEffect.h"
+#include "leds/effects/CandleFlickerEffect.h"
 #include "leds/effects/AuraEffect.h"
 #include "leds/effects/FutureEffect.h"
 #include "leds/effects/FutureRainbowEffect.h"
 #include "leds/effects/RgbPatternEffect.h"
-
-
 
 SmartLantern::SmartLantern() :
     buttonFeedback(leds),
@@ -94,19 +93,11 @@ void SmartLantern::initializeEffects() {
     auto futureEffect = new FutureEffect(leds);
     auto futureRainbowEffect = new FutureRainbowEffect(leds);
 
-
     // Store a reference to the fire effect for temperature override
     fireEffectPtr = fireEffect;
 
     // Solid color effects for ambient mode
-    auto candleEffect = new TemperatureColorEffect(
-    leds,
-    1800,   // Candle light temperature
-    false,  // Core off
-    true,   // Inner on
-    true,   // Outer on (with fade)
-    false   // Ring off
-);
+    auto candleEffect = new CandleFlickerEffect(leds);
 
     auto incandescent = new TemperatureColorEffect(
         leds,
@@ -167,7 +158,6 @@ void SmartLantern::initializeEffects() {
         GradientEffect::createBlueToWhiteGradient(),
         GradientEffect::reverseGradient(GradientEffect::createBlueToWhiteGradient()),
         Gradient()
-
     );
 
     // 5. Christmas gradient on all strips
@@ -190,8 +180,6 @@ void SmartLantern::initializeEffects() {
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
     effects[MODE_ANIMATED].push_back(partyRippleEffect);
 
-
-
     // MODE_PARTY
     effects[MODE_PARTY].push_back(coreGrowEffect); // Core ripple
     effects[MODE_PARTY].push_back(matrixEffect); // Matrix
@@ -202,8 +190,6 @@ void SmartLantern::initializeEffects() {
     effects[MODE_PARTY].push_back(futureEffect);
     effects[MODE_PARTY].push_back(futureRainbowEffect);
     effects[MODE_PARTY].push_back(rgbPatternEffect); // Add the new RGB pattern effect
-
-
 }
 
 void SmartLantern::begin() {
@@ -232,8 +218,7 @@ void SmartLantern::begin() {
     tempButtonState = preferences.getUChar("tempBtn", 0);
     lightButtonState = preferences.getUChar("lightBtn", 0);
 
-
-// Set power on immediately
+    // Set power on immediately
     isPowerOn = true;
 
     // Set mode and effect (default to Ambient white if no valid saved data)
@@ -371,243 +356,178 @@ void SmartLantern::updateEffects() {
     // Don't update effects if power is off
     if (!isPowerOn && !isAutoOn) return;
 
-    // Tell the current effect whether to skip ring updates
-    if (currentMode != MODE_OFF && effects[currentMode].size() > 0) {
-        // Ensure currentEffect is within bounds
-        if (currentEffect < 0 || currentEffect >= effects[currentMode].size()) {
-            currentEffect = 0;
+    // Check if temperature button is active and temperature is low
+    if (tempButtonState > 0) {
+        float temperature = sensors.getTemperature();
+        bool shouldShowFire = false;
+
+        switch (tempButtonState) {
+            case 1: // 18°C or below
+                shouldShowFire = (temperature <= 18.0);
+                break;
+            case 2: // 10°C or below
+                shouldShowFire = (temperature <= 10.0);
+                break;
+            case 3: // 5°C or below
+                shouldShowFire = (temperature <= 5.0);
+                break;
         }
 
-        // Tell effect to skip ring if button feedback is active
-        effects[currentMode][currentEffect]->setSkipRing(buttonFeedback.isFeedbackActive());
-
-        // Check for temperature override
-        float currentTemp = sensors.getTemperature();
-        if (tempButtonState > 0 && currentTemp <= TEMP_THRESHOLD_RED) {
-            // Find the fire effect in MODE_ANIMATED
-            for (auto effect: effects[MODE_ANIMATED]) {
-                auto fireEffect = (FireEffect *) (effect);
-                if (fireEffect) {
-                    fireEffect->setSkipRing(buttonFeedback.isFeedbackActive());
-                    fireEffect->update();
-                    return;
-                }
-            }
+        if (shouldShowFire) {
+            // Override current effect with fire effect
+            fireEffectPtr->update();
+            return;
         }
+    }
 
-        // Update the current effect
-        effects[currentMode][currentEffect]->update();
-    } else {
-        // All LEDs off for MODE_OFF
-        leds.clearAll();
+    // Normal effect update
+    if (currentMode != MODE_OFF && !effects[currentMode].empty()) {
+        if (currentEffect < effects[currentMode].size()) {
+            effects[currentMode][currentEffect]->update();
+        }
     }
 }
 
+// Note: Using constants from Config.h:
+// POWER_BUTTON_HOLD_TIME, LIGHT_THRESHOLD_HIGH, LIGHT_THRESHOLD_MEDIUM, LIGHT_THRESHOLD_LOW
+// BUTTON_HOLD_TIME is defined in SmartLantern.h as static const unsigned long BUTTON_HOLD_TIME = 100;
+
 void SmartLantern::processTouchInputs() {
-    // Static variable to track if power button has already toggled during this button press
-    static bool powerHasToggled = false;
+    // Read current touch states
+    bool tempTouched = sensors.isTouched(0);     // Temperature button
+    bool lightTouched = sensors.isTouched(1);    // Light sensor button
+    bool powerTouched = sensors.isTouched(2);    // Power button
+    bool modeTouched = sensors.isTouched(3);     // Mode button
+    bool effectTouched = sensors.isTouched(4);   // Effect button
 
-    // === TEMPERATURE BUTTON HANDLING ===
+    unsigned long currentTime = millis();
 
-    // Check if temperature button is currently being touched
-    if (sensors.isTouched(TEMP_BUTTON_CHANNEL)) {
-        // If this is the start of a new touch session (button wasn't toggled yet)
-        if (!tempButtonToggled) {
-            // First time we detect touch - start the timer
-            if (tempButtonPressTime == 0) {
-                tempButtonPressTime = millis();
-                Serial.println("DEBUG: Temperature button touch started - beginning hold timer");
-            }
+    // Handle Temperature Button (0)
+    if (tempTouched) {
+        if (tempButtonPressTime == 0) {
+            tempButtonPressTime = currentTime;  // Start timing
+            tempButtonToggled = false;          // Reset toggle state
+        }
+        // Check if held long enough and hasn't been toggled yet
+        if (!tempButtonToggled && (currentTime - tempButtonPressTime >= SmartLantern::BUTTON_HOLD_TIME)) {
+            // Toggle temperature button state
+            tempButtonState = (tempButtonState + 1) % 4;  // Cycle 0-3
+            tempButtonToggled = true;  // Mark as toggled
 
-            unsigned long currentHoldTime = millis() - tempButtonPressTime;
+            // Save to persistent storage
+            preferences.putUChar("tempBtn", tempButtonState);
 
-            // Check if we've reached the 1/4-second threshold
-            if (currentHoldTime >= BUTTON_HOLD_TIME) {
-                tempButtonState = (tempButtonState + 1) % 4; // Cycle through states 0-3
-                tempButtonToggled = true; // Prevent multiple toggles during same hold
+            // Show button feedback using the correct method
+            buttonFeedback.showTemperatureState(tempButtonState);
 
-                // Save temperature button state
-                preferences.putUChar("tempBtn", tempButtonState);
-
-                // Show visual feedback on ring LEDs
-                buttonFeedback.showTemperatureState(tempButtonState);
-
-                Serial.print("Temperature button held for 1/4 second - state: ");
-                Serial.println(tempButtonState);
-            }
+            Serial.print("Temperature button state: ");
+            Serial.println(tempButtonState);
         }
     } else {
-        // Button is not touched - reset for next touch session
-        if (tempButtonToggled || tempButtonPressTime > 0) {
-            Serial.println("DEBUG: Temperature button released - resetting for next touch");
-        }
-        tempButtonPressTime = 0;
-        tempButtonToggled = false;
+        tempButtonPressTime = 0;   // Reset timing when released
+        tempButtonToggled = false; // Reset toggle state
     }
 
-    // === LIGHT BUTTON HANDLING ===
+    // Handle Light Sensor Button (1)
+    if (lightTouched) {
+        if (lightButtonPressTime == 0) {
+            lightButtonPressTime = currentTime;
+            lightButtonToggled = false;
+        }
+        if (!lightButtonToggled && (currentTime - lightButtonPressTime >= SmartLantern::BUTTON_HOLD_TIME)) {
+            lightButtonState = (lightButtonState + 1) % 4;  // Cycle 0-3
+            lightButtonToggled = true;
 
-    // Check if light button is currently being touched
-    if (sensors.isTouched(LIGHT_BUTTON_CHANNEL)) {
-        // If this is the start of a new touch session (button wasn't toggled yet)
-        if (!lightButtonToggled) {
-            // First time we detect touch - start the timer
-            if (lightButtonPressTime == 0) {
-                lightButtonPressTime = millis();
-                Serial.println("DEBUG: Light button touch started - beginning hold timer");
-            }
+            // Save to persistent storage
+            preferences.putUChar("lightBtn", lightButtonState);
 
-            unsigned long currentHoldTime = millis() - lightButtonPressTime;
+            // Show button feedback using the correct method
+            buttonFeedback.showLightState(lightButtonState);
 
-            // Check if we've reached the 1/4-second threshold
-            if (currentHoldTime >= BUTTON_HOLD_TIME) {
-                lightButtonState = (lightButtonState + 1) % 4; // Cycle through states 0-3
-                lightButtonToggled = true; // Prevent multiple toggles during same hold
-
-                // Save light sensitivity button state
-                preferences.putUChar("lightBtn", lightButtonState);
-
-                // Show visual feedback on ring LEDs
-                buttonFeedback.showLightState(lightButtonState);
-
-                // Debug output with clear state names
-                String stateNames[] = {"OFF", "LOW", "MEDIUM", "HIGH"};
-                Serial.print("Light button held for 1/4 second - state: ");
-                Serial.print(stateNames[lightButtonState]);
-                Serial.print(" (");
-                Serial.print(lightButtonState);
-                Serial.println(")");
-
-                // Reset timer when sensitivity changes
-                lowLightStartTime = 0;
-                Serial.println("Light sensor timer reset due to sensitivity change");
-            }
+            Serial.print("Light sensor button state: ");
+            Serial.println(lightButtonState);
         }
     } else {
-        // Button is not touched - reset for next touch session
-        if (lightButtonToggled || lightButtonPressTime > 0) {
-            Serial.println("DEBUG: Light button released - resetting for next touch");
-        }
         lightButtonPressTime = 0;
         lightButtonToggled = false;
     }
 
-    // === MODE BUTTON HANDLING (only works when powered on) ===
+    // Handle Power Button (2) - Special case with 2-second hold for OFF
+    static bool powerHasToggled = false;  // Prevent multiple toggles during single press
 
-    // === MODE BUTTON HANDLING (only works when powered on) ===
+    if (powerTouched) {
+        if (powerButtonPressTime == 0) {
+            powerButtonPressTime = currentTime;
+            powerHasToggled = false;  // Reset toggle state for new press
+        }
 
-    // Check if mode button is currently being touched and power is on
-    if (sensors.isTouched(MODE_BUTTON_CHANNEL) && isPowerOn) {
-        // If this is the start of a new touch session (button wasn't toggled yet)
-        if (!modeButtonToggled) {
-            // First time we detect touch - start the timer
-            if (modeButtonPressTime == 0) {
-                modeButtonPressTime = millis();
-                Serial.println("DEBUG: Mode button touch started - beginning hold timer");
+        // If powered OFF and any touch detected, turn ON immediately
+        if (!isPowerOn && !powerHasToggled) {
+            setPower(true);
+            powerHasToggled = true;
+
+            Serial.println("Power button pressed - turning ON");
+        }
+        // If powered ON and held for 2 seconds, turn OFF
+        else if (isPowerOn && !powerHasToggled && (currentTime - powerButtonPressTime >= POWER_BUTTON_HOLD_TIME)) {
+            setPower(false);
+            powerHasToggled = true;
+
+            Serial.println("Power button held 2 seconds - turning OFF");
+        }
+    } else {
+        // Button released - reset timing
+        if (powerButtonPressTime != 0) {
+            powerButtonPressTime = 0;
+
+            // Only log if we detected a press but didn't turn OFF
+            if (isPowerOn && !powerHasToggled) {
+                Serial.println("Power button released (hold 2 seconds to turn OFF)");
             }
+        }
 
-            unsigned long currentHoldTime = millis() - modeButtonPressTime;
+        // Note: powerHasToggled will be reset on next button press
+    }
 
-            // Check if we've reached the 1/4-second threshold
-            if (currentHoldTime >= BUTTON_HOLD_TIME) {
+    // Handle Mode Button (3)
+    if (modeTouched) {
+        if (modeButtonPressTime == 0) {
+            modeButtonPressTime = currentTime;
+            modeButtonToggled = false;
+        }
+        if (!modeButtonToggled && (currentTime - modeButtonPressTime >= SmartLantern::BUTTON_HOLD_TIME)) {
+            if (isPowerOn) {  // Only change mode if powered on
                 nextMode();
-                modeButtonToggled = true; // Prevent multiple toggles during same hold
+                modeButtonToggled = true;
 
-                // Show visual feedback for mode selection
-                // We have 4 modes (1-4, skipping MODE_OFF which is 0)
-                int displayMode = currentMode - 1; // Convert to 0-based index (MODE_AMBIENT=1 becomes 0, etc.)
-                buttonFeedback.showModeSelection(displayMode, 4); // 4 total modes to display
-
-                Serial.print("Mode button held for 1/4 second - mode: ");
-                Serial.println(currentMode);
+                // Show mode feedback using showModeSelection
+                buttonFeedback.showModeSelection(currentMode - 1, 4); // Convert to 0-based, 4 total modes
             }
         }
     } else {
-        // Button is not touched OR power is off - reset for next touch session
-        if (modeButtonToggled || modeButtonPressTime > 0) {
-            Serial.println("DEBUG: Mode button released - resetting for next touch");
-        }
         modeButtonPressTime = 0;
         modeButtonToggled = false;
     }
 
-    // === EFFECT BUTTON HANDLING (only works when powered on) ===
-
-    // Check if effect button is currently being touched and power is on
-    if (sensors.isTouched(EFFECT_BUTTON_CHANNEL) && isPowerOn) {
-        // If this is the start of a new touch session (button wasn't toggled yet)
-        if (!effectButtonToggled) {
-            // First time we detect touch - start the timer
-            if (effectButtonPressTime == 0) {
-                effectButtonPressTime = millis();
-                Serial.println("DEBUG: Effect button touch started - beginning hold timer");
-            }
-
-            unsigned long currentHoldTime = millis() - effectButtonPressTime;
-
-            // Check if we've reached the 1/4-second threshold
-            if (currentHoldTime >= BUTTON_HOLD_TIME) {
+    // Handle Effect Button (4)
+    if (effectTouched) {
+        if (effectButtonPressTime == 0) {
+            effectButtonPressTime = currentTime;
+            effectButtonToggled = false;
+        }
+        if (!effectButtonToggled && (currentTime - effectButtonPressTime >= SmartLantern::BUTTON_HOLD_TIME)) {
+            if (isPowerOn) {  // Only change effect if powered on
                 nextEffect();
-                effectButtonToggled = true; // Prevent multiple toggles during same hold
+                effectButtonToggled = true;
 
-                // Show visual feedback for effect selection
-                // Get the number of effects available for the current mode
+                // Show effect feedback using showEffectSelection
                 int numEffects = effects[currentMode].size();
                 buttonFeedback.showEffectSelection(currentEffect, numEffects);
-
-                Serial.print("Effect button held for 1/4 second - effect: ");
-                Serial.println(currentEffect);
             }
         }
     } else {
-        // Button is not touched OR power is off - reset for next touch session
-        if (effectButtonToggled || effectButtonPressTime > 0) {
-            Serial.println("DEBUG: Effect button released - resetting for next touch");
-        }
         effectButtonPressTime = 0;
         effectButtonToggled = false;
-    }
-
-    // === POWER BUTTON HANDLING (uses existing 2-second hold logic) ===
-
-    // Check for power button press (start of touch) - keep using isNewTouch for power since it works
-    if (sensors.isNewTouch(POWER_BUTTON_CHANNEL)) {
-        powerButtonPressTime = millis(); // Record press time for hold detection
-        powerHasToggled = false; // Reset toggle flag for new press
-
-        // If lantern is currently OFF, turn it ON with a simple touch
-        if (!isPowerOn) {
-            setPower(true); // Turn on immediately
-            powerHasToggled = true; // Mark that we've already acted on this press
-            Serial.println("Power button touched - turning ON");
-        } else {
-            // If lantern is ON, we need to wait for a hold to turn it OFF
-            Serial.println("DEBUG: Power button pressed - starting hold timer for OFF");
-        }
-    }
-
-    // Check if power button is currently being held (only matters if lantern is ON)
-    if (sensors.isTouched(POWER_BUTTON_CHANNEL) && isPowerOn) {
-        unsigned long currentHoldTime = millis() - powerButtonPressTime;
-
-        // Check if we've reached the 2-second threshold for turning OFF
-        if (currentHoldTime >= POWER_BUTTON_HOLD_TIME && !powerHasToggled) {
-            setPower(false); // Turn off after 2-second hold
-            powerHasToggled = true; // Prevent multiple toggles during same hold
-            Serial.println("Power button held for 2 seconds - turning OFF");
-        }
-    }
-
-    // Check for power button release (end of touch)
-    if (sensors.isNewRelease(POWER_BUTTON_CHANNEL)) {
-        unsigned long pressDuration = millis() - powerButtonPressTime;
-
-        // If released before 2 seconds while lantern was ON and haven't toggled, do nothing
-        if (pressDuration < POWER_BUTTON_HOLD_TIME && !powerHasToggled && isPowerOn) {
-            Serial.println("DEBUG: Power button released early while ON - no action (need to hold to turn OFF)");
-        }
-
-        // Note: powerHasToggled will be reset on next button press
     }
 }
 
@@ -641,7 +561,7 @@ void SmartLantern::handleAutoLighting() {
         if (lowLightStartTime == 0) {
             lowLightStartTime = currentTime;
         } else if (currentTime - lowLightStartTime >= 5000) {
-            // 1 minute
+            // 5 seconds
             // Turn on if not already on
             if (!isPowerOn) {
                 Serial.println("5 seconds of darkness - turning ON");
@@ -654,7 +574,7 @@ void SmartLantern::handleAutoLighting() {
         if (lowLightStartTime == 0) {
             lowLightStartTime = currentTime;
         } else if (currentTime - lowLightStartTime >= 5000) {
-            // 1 minute
+            // 5 seconds
             // Turn off if currently on
             if (isPowerOn) {
                 Serial.println("5 seconds of brightness - turning OFF");
@@ -740,52 +660,45 @@ void SmartLantern::updateWindDown() {
         leds.getRing()[clearPos] = CRGB::Black;
     }
 
-    // Show the changes
+    // Show the updated LEDs
     leds.showAll();
 
-    // Move to next position for next update
+    // Move to next position
     windDownPosition++;
-
-    // Debug output every 20 positions to reduce spam
-    if (windDownPosition % 20 == 0) {
-        Serial.print("Wind-down progress: ");
-        Serial.print(windDownPosition);
-        Serial.print(" / ");
-        Serial.println(maxPosition);
-    }
 }
 
 void SmartLantern::updateBrightnessFromTOF() {
-    // Only apply TOF brightness control when lantern is powered on
-    if (!isPowerOn) {
-        return;
-    }
+    // Get distance from TOF sensor
+    int distance = sensors.getDistance();
 
-    // Get brightness from distance sensor
-    int tofBrightness = sensors.getBrightnessFromDistance();
+    // Only adjust brightness if a hand is detected (distance < 400mm)
+    if (distance > 0 && distance < 400) {
+        // Get orientation to determine gesture direction
+        bool isUpsideDown = sensors.isUpsideDown();
 
-    // Only update if we have a valid reading (hand detected in range)
-    if (tofBrightness != -1) {
-        // Convert 0-100 percentage to 0-255 range for FastLED
-        // But keep minimum brightness at ~10% so LEDs don't completely disappear
-        int ledBrightness;
+        // Map distance to brightness (25-255 range for good visibility)
+        int brightness;
 
-        if (tofBrightness == 0) {
-            // 0-10cm range: Turn LEDs off completely
-            ledBrightness = 0;
+        if (isUpsideDown) {
+            // When upside down, closer = dimmer (inverted gesture)
+            brightness = map(distance, 50, 350, 255, 25);
         } else {
-            // 10-80cm range: Map to 25-255 (10%-100%) to keep LEDs visible
-            ledBrightness = map(tofBrightness, 1, 100, 25, 255);
+            // When right-side up, farther = brighter (normal gesture)
+            brightness = map(distance, 50, 350, 25, 255);
         }
 
-        // Apply the brightness to LED controller
-        leds.setBrightness(ledBrightness);
+        // Constrain brightness to valid range
+        brightness = constrain(brightness, 25, 255);
 
-        // Optional: Uncomment for debugging brightness changes
-        // Serial.print("TOF Brightness: ");
-        // Serial.print(tofBrightness);
-        // Serial.print("% -> LED: ");
-        // Serial.println(ledBrightness);
+        // Set the brightness
+        leds.setBrightness(brightness);
+
+        // Optional: uncomment for debugging
+        // Serial.print("Distance: ");
+        // Serial.print(distance);
+        // Serial.print("mm, Brightness: ");
+        // Serial.print(brightness);
+        // Serial.print(", Upside down: ");
+        // Serial.println(isUpsideDown ? "Yes" : "No");
     }
-    // If tofBrightness == -1 (no hand detected), keep current brightness unchanged
 }
