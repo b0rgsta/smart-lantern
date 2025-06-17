@@ -66,26 +66,36 @@ void PartyFireEffect::updateCoreGlow() {
 
     // Always update breathing phase for core breathing effect
     static float coreBreathingPhase = 0.0f;
-    coreBreathingPhase += 0.01f; // Slower breathing for more noticeable effect (about 6-7 second cycle)
+    coreBreathingPhase += 0.01f; // Back to original breathing speed
 
     // Keep phase within 0 to 2*PI range
     if (coreBreathingPhase > 2.0f * PI) {
         coreBreathingPhase -= 2.0f * PI;
     }
 
-    // Calculate breathing intensity using sine wave
+    // Calculate breathing intensity with longer hold at peak
     float sineValue = sin(coreBreathingPhase);      // -1.0 to 1.0
     float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
 
-    // Map to much wider intensity range (20% to 100% for very obvious breathing)
-    float breathingIntensity = 0.2f + (normalizedSine * 0.8f);
+    // Create a breathing pattern that holds longer at peak brightness
+    float breathingCurve;
+    if (normalizedSine > 0.7f) {
+        // Hold at peak for longer (when sine is in top 30% of cycle)
+        breathingCurve = 1.0f;
+    } else {
+        // Scale the remaining 70% of the cycle to 0.0-1.0 range
+        breathingCurve = normalizedSine / 0.7f;
+    }
+
+    // Map back to original intensity range (20% to 100%) but with longer peak hold
+    float breathingIntensity = 0.2f + (breathingCurve * 0.8f);
 
     // Check if it's time to update core glow variations
     if (currentTime - lastCoreUpdate >= CORE_UPDATE_INTERVAL) {
         lastCoreUpdate = currentTime;
 
-        // Reduce random variation so breathing is more obvious
-        float intensityVariation = (random(100) / 100.0f) * 0.05f - 0.025f; // ±2.5% variation (reduced)
+        // Minimal random variation to keep breathing obvious
+        float intensityVariation = (random(100) / 100.0f) * 0.03f - 0.015f; // ±1.5% variation
         coreGlowIntensity = breathingIntensity + intensityVariation;
 
         // Keep intensity within valid range
@@ -148,66 +158,66 @@ void PartyFireEffect::updateRingBreathing() {
 
 void PartyFireEffect::applyCoreGradient(float intensity) {
     // Apply gradient from deep red at bottom to black at top across all core segments
+    // Important: segment 1 (middle) is flipped according to mapLEDPosition
 
-    // Core strip has 3 segments - apply gradient to each one
-    int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
+    int segmentLength = LED_STRIP_CORE_COUNT / 3;
 
+    // Apply gradient to each of the 3 core segments
     for (int segment = 0; segment < 3; segment++) {
-        for (int i = 0; i < coreSegmentLength; i++) {
-            // Calculate position in segment (0.0 at bottom, 1.0 at top)
-            float positionRatio = (float)i / (coreSegmentLength - 1);
+        for (int i = 0; i < segmentLength; i++) {
+            // Calculate position as percentage from bottom (0.0) to top (1.0)
+            float position = (float)i / (float)(segmentLength - 1);
 
-            // Create extremely dramatic gradient fade
-            // Use quartic fade (x^4) for very sharp drop-off to black
-            float fadeAmount = 1.0f - (positionRatio * positionRatio * positionRatio * positionRatio);
-
-            // Force even more black at the top - anything above 50% position gets heavily reduced
-            if (positionRatio > 0.5f) {
-                float topFade = (positionRatio - 0.5f) / 0.5f; // 0.0 to 1.0 in top 50%
-                fadeAmount *= (1.0f - topFade * 0.95f); // Reduce by up to 95% in top half
+            // Create gradient: fade to black over last 85%, with top 15% completely black
+            float gradientIntensity;
+            if (position < 0.85f) {
+                // Bottom 85% fades from full brightness to black
+                float fadePosition = position / 0.85f; // 0.0 to 1.0 over bottom 85%
+                gradientIntensity = 1.0f - fadePosition; // Fade from 1.0 to 0.0
+            } else {
+                // Top 15% is completely black
+                gradientIntensity = 0.0f;
             }
 
-            // Force complete black in top 20%
-            if (positionRatio > 0.8f) {
-                fadeAmount = 0.0f; // Force pure black at very top
-            }
+            // Apply overall breathing intensity
+            float finalIntensity = gradientIntensity * intensity;
 
-            // Apply overall intensity with breathing effect
-            fadeAmount *= intensity;
-
-            // Convert deep red color to RGB and apply fade
+            // Convert deep red color to RGB components
             CRGB baseColor = leds.neoColorToCRGB(CORE_DEEP_RED);
-            CRGB fadedColor = CRGB(
-                baseColor.r * fadeAmount,
-                baseColor.g * fadeAmount,
-                baseColor.b * fadeAmount
+
+            // Apply intensity to create the final color
+            CRGB finalColor = CRGB(
+                baseColor.r * finalIntensity,
+                baseColor.g * finalIntensity,
+                baseColor.b * finalIntensity
             );
 
-            // Calculate physical LED position using the LED controller's mapping
-            int physicalPos = leds.mapPositionToPhysical(0, i, segment); // 0 = core strip
-            physicalPos += segment * coreSegmentLength; // Add segment offset
+            // Get physical LED position (handles segment flipping automatically)
+            int physicalPos = mapLEDPosition(0, i, segment); // 0 = core strip type
 
-            // Set the LED color
-            if (physicalPos >= 0 && physicalPos < LED_STRIP_CORE_COUNT) {
-                leds.getCore()[physicalPos] = fadedColor;
+            // Calculate the actual LED index in the strip array
+            int actualLEDIndex = (segment * segmentLength) + physicalPos;
+
+            if (actualLEDIndex >= 0 && actualLEDIndex < LED_STRIP_CORE_COUNT) {
+                leds.getCore()[actualLEDIndex] = finalColor;
             }
         }
     }
 }
 
 void PartyFireEffect::applyRingGlow(float intensity) {
-    // Create color transition from red-orange to deeper red
-    // Use breathing intensity to blend between two colors
+    // Create color transition using the new MORE RED colors
+    // Use breathing intensity to blend between the two red colors
 
-    // Color 1: Current red-orange (0xFF4500)
-    CRGB color1 = leds.neoColorToCRGB(RING_RED_ORANGE);
+    // Color 1: Primary red (0xEE1100) - brighter red
+    CRGB color1 = leds.neoColorToCRGB(RING_RED_PRIMARY);
 
-    // Color 2: Deeper/more red color (0xDD2200 - darker and more red)
-    CRGB color2 = leds.neoColorToCRGB(0xDD2200);
+    // Color 2: Deeper red (0xCC0000) - darker red
+    CRGB color2 = leds.neoColorToCRGB(RING_RED_SECONDARY);
 
     // Use intensity to blend between colors (0.0 = color2, 1.0 = color1)
     // This creates a color fade as the ring breathes
-    float blendRatio = intensity; // Higher intensity = more orange, lower = more red
+    float blendRatio = intensity; // Higher intensity = brighter red, lower = deeper red
 
     CRGB blendedColor = CRGB(
         color2.r + ((color1.r - color2.r) * blendRatio),

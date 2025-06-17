@@ -57,8 +57,9 @@ private:
     // Core color definitions
     static constexpr uint32_t CORE_DEEP_RED = 0x8B0000;    // Deep red color for core base
 
-    // Ring color definitions
-    static constexpr uint32_t RING_RED_ORANGE = 0xFF4500;  // Red-orange color for ring breathing
+    // Ring color definitions - MORE RED than orange
+    static constexpr uint32_t RING_RED_PRIMARY = 0xEE1100;   // Primary red color (more red than before)
+    static constexpr uint32_t RING_RED_SECONDARY = 0xCC0000; // Deeper red for transitions
 
     // Animation timing constants
     static const unsigned long CORE_UPDATE_INTERVAL = 50;      // Update core every 50ms (20 FPS)
