@@ -17,6 +17,7 @@
 #include "leds/effects/FutureEffect.h"
 #include "leds/effects/FutureRainbowEffect.h"
 #include "leds/effects/RgbPatternEffect.h"
+#include "leds/effects/EmeraldCityEffect.h"
 
 SmartLantern::SmartLantern() :
     buttonFeedback(leds),
@@ -92,6 +93,8 @@ void SmartLantern::initializeEffects() {
     );
     auto futureEffect = new FutureEffect(leds);
     auto futureRainbowEffect = new FutureRainbowEffect(leds);
+    // Create the Emerald City effect
+    auto emeraldCityEffect = new EmeraldCityEffect(leds);
 
     // Store a reference to the fire effect for temperature override
     fireEffectPtr = fireEffect;
@@ -176,6 +179,7 @@ void SmartLantern::initializeEffects() {
 
     // MODE_ANIMATED
     effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
+    effects[MODE_ANIMATED].push_back(emeraldCityEffect); // Add Emerald City effect
     effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
     effects[MODE_ANIMATED].push_back(partyRippleEffect);
