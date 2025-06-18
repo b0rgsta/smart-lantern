@@ -26,6 +26,13 @@ static constexpr float BASE_BRIGHTNESS = 1.0f;            // Overall candle brig
 static constexpr float FADE_START_POSITION = 0.3f;        // Start fading at 30% up the strip
 static constexpr float FADE_END_POSITION = 0.9f;          // Complete fade by 90% up the strip
 
+// Animation constants for the floating bright spot - LARGER SPAN AROUND MIDDLE
+static constexpr float BRIGHT_SPOT_MIN = 0.2f;      // 20% position - larger range from middle
+static constexpr float BRIGHT_SPOT_MAX = 0.8f;      // 80% position - larger range from middle (center is 50%)
+static constexpr float BRIGHT_SPOT_SPEED = 0.08f;   // How fast it moves toward target
+static constexpr unsigned long POSITION_UPDATE_INTERVAL = 80; // Change target every 80ms
+static constexpr int POSITION_CHANGE_CHANCE = 60;   // 60% chance to pick new target
+
 CandleFlickerEffect::CandleFlickerEffect(LEDController& ledController) :
     Effect(ledController),
     lastFlickerUpdate(0),
@@ -36,12 +43,15 @@ CandleFlickerEffect::CandleFlickerEffect(LEDController& ledController) :
     globalFlickerTarget(1.0f),
     mainFlameTarget(1.0f),
     secondaryFlameTarget(1.1f),         // Slightly brighter middle target
-    baseGlowTarget(1.3f)                // Much brighter base target
+    baseGlowTarget(1.3f),               // Much brighter base target
+    brightSpotPosition(0.5f),           // Start at middle of range (50%)
+    brightSpotTarget(0.5f),             // Start at middle of range (50%)
+    lastPositionUpdate(0)               // Initialize timing
 {
     // Initialize base candle color (warm enhanced color)
     baseColor = getCandleColor();
 
-    Serial.println("CandleFlickerEffect initialized - smooth global flicker with gentle zones");
+    Serial.println("CandleFlickerEffect initialized - smooth global flicker with gentle zones and animated bright spot");
 }
 
 void CandleFlickerEffect::reset() {
@@ -59,6 +69,11 @@ void CandleFlickerEffect::reset() {
 
     // Reset timing
     lastFlickerUpdate = 0;
+
+    // Reset animation variables
+    brightSpotPosition = 0.5f;          // Reset to middle of range (50%)
+    brightSpotTarget = 0.5f;            // Reset to middle of range (50%)
+    lastPositionUpdate = 0;
 }
 
 void CandleFlickerEffect::update() {
@@ -69,6 +84,9 @@ void CandleFlickerEffect::update() {
 
     // Update global and zone flicker intensities
     updateFlickerIntensities();
+
+    // Update bright spot position animation
+    updateBrightSpotPosition();
 
     // Clear all LEDs first
     leds.clearAll();
@@ -134,8 +152,27 @@ void CandleFlickerEffect::updateFlickerIntensities() {
     baseGlowIntensity += baseDifference * ZONE_SMOOTH_FACTOR * 0.8f; // Slightly slower but still smooth
 }
 
+void CandleFlickerEffect::updateBrightSpotPosition() {
+    unsigned long currentTime = millis();
+
+    // Update bright spot target position periodically
+    if (currentTime - lastPositionUpdate >= POSITION_UPDATE_INTERVAL) {
+        lastPositionUpdate = currentTime;
+
+        // Randomly decide to change target position
+        if (random(100) < POSITION_CHANGE_CHANCE) {
+            // Pick new random target between 2/5 and 4/5
+            brightSpotTarget = BRIGHT_SPOT_MIN + (random(100) / 100.0f) * (BRIGHT_SPOT_MAX - BRIGHT_SPOT_MIN);
+        }
+    }
+
+    // Smoothly move current position toward target
+    float positionDifference = brightSpotTarget - brightSpotPosition;
+    brightSpotPosition += positionDifference * BRIGHT_SPOT_SPEED;
+}
+
 void CandleFlickerEffect::applyCandleFlameToInner() {
-    // Apply flame zones to each inner strip segment with center-length fade effect
+    // Apply flame zones to each inner strip segment with animated bright spot
     for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
         int segmentStart = segment * INNER_LEDS_PER_STRIP;
 
@@ -145,16 +182,15 @@ void CandleFlickerEffect::applyCandleFlameToInner() {
             // Calculate position ratio (0.0 at bottom, 1.0 at top)
             float positionRatio = (float)i / (INNER_LEDS_PER_STRIP - 1);
 
-            // Calculate center-length fade factor
-            // Brightest in the middle of the strip length, fading to both ends
-            float centerPosition = 0.5f; // Middle of strip
-            float distanceFromCenter = abs(positionRatio - centerPosition);
-            float maxDistance = 0.5f; // Maximum distance from center
+            // Calculate animated bright spot fade factor
+            // Brightest at current brightSpotPosition, fading to both ends
+            float distanceFromBrightSpot = abs(positionRatio - brightSpotPosition);
+            float maxDistance = max(brightSpotPosition, 1.0f - brightSpotPosition); // Distance to furthest end
 
-            // Create subtle center with gentle fade to ends
-            float lengthFadeFactor = 1.0f - (distanceFromCenter / maxDistance);
+            // Create MORE DRAMATIC fade from bright spot position
+            float lengthFadeFactor = 1.0f - (distanceFromBrightSpot / maxDistance);
             lengthFadeFactor = lengthFadeFactor * lengthFadeFactor; // Square for smoother fade
-            lengthFadeFactor = 0.7f + (lengthFadeFactor * 0.6f); // Range from 70% to 130% - much more subtle
+            lengthFadeFactor = 0.4f + (lengthFadeFactor * 1.2f); // Range from 40% to 160% - much more dramatic
 
             // Determine which flame zone this LED belongs to and get zone intensity
             float zoneIntensity;
@@ -176,7 +212,7 @@ void CandleFlickerEffect::applyCandleFlameToInner() {
                                mainFlameIntensity * blendFactor;
             }
 
-            // Apply GLOBAL flicker, zone intensity, AND length fade
+            // Apply GLOBAL flicker, zone intensity, AND animated length fade
             float finalIntensity = BASE_BRIGHTNESS * globalFlickerIntensity * zoneIntensity * lengthFadeFactor;
 
             // Apply intensity to base candle color
@@ -192,7 +228,7 @@ void CandleFlickerEffect::applyCandleFlameToInner() {
 }
 
 void CandleFlickerEffect::applyCandleFlameAndFadeToOuter() {
-    // Apply flame zones with fade to each outer strip segment with center-length fade effect
+    // Apply flame zones with fade to each outer strip segment with animated bright spot
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
         int segmentStart = segment * OUTER_LEDS_PER_STRIP;
 
@@ -202,16 +238,15 @@ void CandleFlickerEffect::applyCandleFlameAndFadeToOuter() {
             // Calculate position ratio (0.0 at bottom, 1.0 at top)
             float positionRatio = (float)i / (OUTER_LEDS_PER_STRIP - 1);
 
-            // Calculate center-length fade factor
-            // Brightest in the middle of the strip length, fading to both ends
-            float centerPosition = 0.5f; // Middle of strip
-            float distanceFromCenter = abs(positionRatio - centerPosition);
-            float maxDistance = 0.5f; // Maximum distance from center
+            // Calculate animated bright spot fade factor
+            // Brightest at current brightSpotPosition, fading to both ends
+            float distanceFromBrightSpot = abs(positionRatio - brightSpotPosition);
+            float maxDistance = max(brightSpotPosition, 1.0f - brightSpotPosition); // Distance to furthest end
 
-            // Create subtle center with gentle fade to ends
-            float lengthFadeFactor = 1.0f - (distanceFromCenter / maxDistance);
+            // Create MORE DRAMATIC fade from bright spot position
+            float lengthFadeFactor = 1.0f - (distanceFromBrightSpot / maxDistance);
             lengthFadeFactor = lengthFadeFactor * lengthFadeFactor; // Square for smoother fade
-            lengthFadeFactor = 0.7f + (lengthFadeFactor * 0.6f); // Range from 70% to 130% - much more subtle
+            lengthFadeFactor = 0.4f + (lengthFadeFactor * 1.2f); // Range from 40% to 160% - much more dramatic
 
             // Determine flame zone intensity (same as inner strips)
             float zoneIntensity;
@@ -249,7 +284,7 @@ void CandleFlickerEffect::applyCandleFlameAndFadeToOuter() {
                 fadeBrightness = 0.0f;
             }
 
-            // Combine GLOBAL flicker, zone intensity, fade effects, AND length fade
+            // Combine GLOBAL flicker, zone intensity, fade effects, AND animated length fade
             float finalBrightness = BASE_BRIGHTNESS * globalFlickerIntensity * zoneIntensity * fadeBrightness * lengthFadeFactor;
 
             // Apply combined brightness to base candle color

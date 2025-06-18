@@ -15,6 +15,7 @@
  * - Outer strips fade to black from bottom to top (like other ambient effects)
  * - Inner strips show full flickering candle light
  * - Core and ring strips disabled for ambient lighting focus
+ * - Animated bright spot that floats between 2/5 and 4/5 positions
  *
  * This effect simulates a realistic candle with smooth global breathing
  * and gentle zone variations instead of harsh strobing effects.
@@ -65,6 +66,11 @@ private:
     // Timing control
     unsigned long lastFlickerUpdate;
 
+    // Animated bright spot position
+    float brightSpotPosition;        // Current position of bright spot (0.4f to 0.8f)
+    float brightSpotTarget;          // Target position for smooth animation
+    unsigned long lastPositionUpdate; // Timing for position updates
+
     /**
      * Update global and zone flicker intensities
      * Creates smooth global candle breathing with subtle zone variations
@@ -72,6 +78,12 @@ private:
      * - Zone variations add subtle flame movement on top of global flicker
      */
     void updateFlickerIntensities();
+
+    /**
+     * Update bright spot position animation
+     * Smoothly animates the bright spot between 2/5 and 4/5 positions
+     */
+    void updateBrightSpotPosition();
 
     /**
      * Apply candle flame zones to inner strips
