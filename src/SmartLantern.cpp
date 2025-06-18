@@ -21,6 +21,7 @@
 #include "leds/effects/SuspendedFireEffect.h"
 #include "leds/effects/SuspendedPartyFireEffect.h"
 #include "leds/effects/LustEffect.h"
+#include "leds/effects/PartyCycleEffect.h"
 
 SmartLantern::SmartLantern() :
     buttonFeedback(leds),
@@ -190,20 +191,41 @@ void SmartLantern::initializeEffects() {
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
     effects[MODE_ANIMATED].push_back(partyRippleEffect);
 
-    // MODE_PARTY
-    effects[MODE_PARTY].push_back(lustEffect); // Add the new Lust effect
-    effects[MODE_PARTY].push_back(emeraldCityEffect); // Add Emerald City effect
-    effects[MODE_PARTY].push_back(suspendedPartyFireEffect);
-    effects[MODE_PARTY].push_back(coreGrowEffect); // Core ripple
-    effects[MODE_PARTY].push_back(matrixEffect); // Matrix
-    effects[MODE_PARTY].push_back(technoOrangeEffect);
-    effects[MODE_PARTY].push_back(rainbowTranceEffect); // Rainbow Trance
-    effects[MODE_PARTY].push_back(partyFireEffect); // Party Fire
-    effects[MODE_PARTY].push_back(rainbowEffect); // Rainbow
-    effects[MODE_PARTY].push_back(futureEffect);
-    effects[MODE_PARTY].push_back(futureRainbowEffect);
-    effects[MODE_PARTY].push_back(rgbPatternEffect); // Add the new RGB pattern effect
+    // MODE_PARTY - Create party cycle effect and individual effects
+    Serial.println("=== CREATING PARTY EFFECTS ===");
 
+    // MODE_PARTY - Create party cycle effect and individual effects
+    Serial.println("=== CREATING PARTY EFFECTS ===");
+
+    // Create vector of individual party effects for cycling
+    std::vector<Effect*> partyEffectsForCycling;
+    partyEffectsForCycling.push_back(lustEffect);
+    partyEffectsForCycling.push_back(emeraldCityEffect);
+    partyEffectsForCycling.push_back(suspendedPartyFireEffect);
+    partyEffectsForCycling.push_back(coreGrowEffect);
+    partyEffectsForCycling.push_back(matrixEffect);
+    partyEffectsForCycling.push_back(technoOrangeEffect);
+    partyEffectsForCycling.push_back(rainbowTranceEffect);
+    partyEffectsForCycling.push_back(partyFireEffect);
+    partyEffectsForCycling.push_back(rainbowEffect);
+    partyEffectsForCycling.push_back(futureEffect);
+    partyEffectsForCycling.push_back(futureRainbowEffect);
+    partyEffectsForCycling.push_back(rgbPatternEffect);
+
+    Serial.println("Created " + String(partyEffectsForCycling.size()) + " individual party effects");
+
+    // Create the party cycle effect
+    auto partyCycleEffect = new PartyCycleEffect(leds, partyEffectsForCycling);
+
+    // Add party cycle effect as the FIRST option in party mode
+    effects[MODE_PARTY].push_back(partyCycleEffect);
+
+    // Add all individual party effects after the cycle effect
+    for (Effect* effect : partyEffectsForCycling) {
+        effects[MODE_PARTY].push_back(effect);
+    }
+
+    Serial.println("Party mode has " + String(effects[MODE_PARTY].size()) + " total effects (cycle + individuals)");
 }
 
 void SmartLantern::begin() {
@@ -321,6 +343,11 @@ void SmartLantern::nextMode() {
 
     String modeNames[] = {"OFF", "AMBIENT", "GRADIENT", "ANIMATED", "PARTY"};
     Serial.println("Mode changed to: " + modeNames[currentMode]);
+
+    // Reset the new effect to ensure clean start
+    if (!effects[currentMode].empty() && currentEffect < effects[currentMode].size()) {
+        effects[currentMode][currentEffect]->reset();
+    }
     Serial.println("Effect reset to: " + effects[currentMode][currentEffect]->getName());
 }
 
