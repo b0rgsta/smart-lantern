@@ -1,4 +1,4 @@
-// src/leds/effects/CoreGrowEffect.cpp
+// src/leds/effects/CodeRedEffect.cpp
 
 #include "CodeRedEffect.h"
 
@@ -67,108 +67,60 @@ void CodeRedEffect::update() {
     // Calculate dynamic interval with randomness to prevent synchronized waves
     int createInterval = TRAIL_CREATE_INTERVAL + random(-TRAIL_STAGGER_VARIANCE, TRAIL_STAGGER_VARIANCE);
 
-    // Always try to maintain target trails with frequent creation
+    // Create new trails when needed with variance to prevent synchronization
     if (activeTrails < TARGET_TRAILS && (currentTime - lastTrailCreateTime >= createInterval)) {
         createNewTrail();
         lastTrailCreateTime = currentTime;
     }
 
-    // More aggressive creation if we're well below target
-    if (activeTrails < TARGET_TRAILS * 0.7) {
-        createNewTrail();
-        lastTrailCreateTime = currentTime;
-    }
-
-    // Emergency creation if we're very low
-    if (activeTrails < TARGET_TRAILS * 0.4) {
-        createNewTrail();
-        lastTrailCreateTime = currentTime - createInterval; // Reset timer to allow immediate next creation
-    }
-
-    // Core effect logic (unchanged)
-    if (currentPhase == GROWING) {
-        // GROWING PHASE: Grow from 1 to 17 LEDs
-        if (currentTime - lastUpdateTime >= GROW_INTERVAL) {
+    // Core effect phases (handle growth and movement)
+    if (currentTime - lastUpdateTime >= ((currentPhase == GROWING) ? GROW_INTERVAL : MOVE_INTERVAL)) {
+        if (currentPhase == GROWING) {
+            // Growing phase
             currentSize++;
-
-            // When we reach full size, switch to moving phase
-            if (currentSize > MAX_SIZE) {
+            if (currentSize >= MAX_SIZE) {
+                // Switch to moving phase
                 currentPhase = MOVING;
-
-                // Set initial positions for moving phase (both start at center)
                 int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
-                int segmentCenter = coreSegmentLength / 2; // Normal center calculation
-                leftPosition = segmentCenter;
-                rightPosition = segmentCenter;
 
-                // Don't update lastUpdateTime here - let the moving phase handle timing
-                // This prevents the flicker by ensuring immediate movement
+                // Start both patterns at center of each segment
+                leftPosition = coreSegmentLength / 2;
+                rightPosition = coreSegmentLength / 2;
 
-                Serial.println("Switching to moving phase - patterns will move in both directions");
-            } else {
-                Serial.print("Growing to size: ");
-                Serial.print(currentSize);
-                Serial.print(" (total LEDs: ");
-                Serial.print(1 + 2 * currentSize);
-                Serial.print(" / 25)");
-                Serial.println();
-
-                lastUpdateTime = currentTime; // Only update timing during normal growth
+                Serial.println("CoreGrowEffect: Switching to moving phase");
             }
-        }
+        } else {
+            // Moving phase
+            leftPosition--;
+            rightPosition++;
 
-        if (currentSize <= MAX_SIZE) {
-            // Draw growing pattern on all 3 core segments using the same method as moving phase
             int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
 
-            for (int segment = 0; segment < 3; segment++) {
-                int segmentCenter = (segment * coreSegmentLength) + (coreSegmentLength / 2);
-
-                // Draw the pattern using the same drawPattern method used in moving phase
-                drawPattern(segment, segmentCenter);
+            // Check if patterns have moved completely off their segments
+            if (leftPosition < -MAX_SIZE && rightPosition >= coreSegmentLength + MAX_SIZE) {
+                // Reset to growing phase
+                reset();
             }
         }
 
-    } else if (currentPhase == MOVING) {
-        // MOVING PHASE: Two full patterns moving in opposite directions
-        if (currentTime - lastUpdateTime >= MOVE_INTERVAL) {
-            // Move both patterns
-            leftPosition--;   // Move left pattern toward start of segment
-            rightPosition++;  // Move right pattern toward end of segment
+        lastUpdateTime = currentTime;
+    }
 
-            lastUpdateTime = currentTime;
-
-            Serial.print("Moving: left=");
-            Serial.print(leftPosition);
-            Serial.print(" right=");
-            Serial.println(rightPosition);
-
-            // Check if both patterns are completely off the strip
-            int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
-            if (leftPosition + MAX_SIZE < 0 && rightPosition - MAX_SIZE >= coreSegmentLength) {
-                // Both patterns are off screen, restart ONLY the core effect (not trails)
-                Serial.println("Core patterns off screen - restarting core only");
-
-                // Reset only core-related variables, leave trails alone
-                currentPhase = GROWING;
-                currentSize = 0;
-                leftPosition = 0;
-                rightPosition = 0;
-                lastUpdateTime = currentTime;
-
-                return; // Don't call reset() which would clear trails
-            }
-        }
-
-        // Always draw both moving patterns
+    // Draw core effect on all 3 segments
+    if (currentPhase == GROWING) {
+        // During growing phase, draw centered pattern on all segments
+        int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
         for (int segment = 0; segment < 3; segment++) {
-            int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
+            int segmentBaseCenter = segment * coreSegmentLength + coreSegmentLength / 2;
+            drawPattern(segment, segmentBaseCenter);
+        }
+    } else {
+        // During moving phase, draw two moving patterns on all segments
+        int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
+        for (int segment = 0; segment < 3; segment++) {
+            int segmentBaseCenter = segment * coreSegmentLength + coreSegmentLength / 2;
 
-            // Calculate segment positions
-            int segmentStart = segment * coreSegmentLength;
-            int segmentBaseCenter = segmentStart + (coreSegmentLength / 2);
-
-            // Calculate positions for this segment's patterns
+            // Calculate pattern positions for this segment
             int segmentLeftPos = segmentBaseCenter + (leftPosition - coreSegmentLength / 2);
             int segmentRightPos = segmentBaseCenter + (rightPosition - coreSegmentLength / 2);
 
@@ -204,7 +156,7 @@ float CodeRedEffect::calculateRingBreathingBrightness() {
     // Convert from -1,1 range to 0,1 range
     float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
 
-    // Map to ring-specific brightness range (30% to 80%)
+    // Map to ring-specific brightness range (15% to 100%)
     return RING_MIN_BRIGHTNESS + (normalizedSine * (RING_MAX_BRIGHTNESS - RING_MIN_BRIGHTNESS));
 }
 
@@ -444,19 +396,43 @@ void CodeRedEffect::drawTrails() {
             // Skip if pixel is outside strip bounds (but don't stop drawing the trail)
             if (pixelPos < 0 || pixelPos >= stripLength) continue;
 
-            // Calculate brightness: tip at 100%, then fade from 70% to 0%
+            // Calculate brightness with steeper falloff for shooting star effect
             float brightness;
             if (i == 0) {
-                // First LED (tip): 100% brightness
+                // Head LED: 100% brightness (brightest orange)
                 brightness = 1.0f;
+            } else if (i <= 3) {
+                // First 3 LEDs after head: Quick falloff from 85% to 50%
+                // This creates the bright "shooting star" head effect
+                float falloffPosition = (float)i / 3.0f;
+                brightness = 0.85f - (falloffPosition * 0.35f); // 85% down to 50%
             } else {
-                // Remaining LEDs: fade from 70% to 0%
-                float fadePosition = (float)(i - 1) / (TRAIL_LENGTH - 1);
-                brightness = 0.7f * (1.0f - fadePosition);
+                // Remaining LEDs: Gradual fade from 50% to 0%
+                float fadePosition = (float)(i - 3) / (TRAIL_LENGTH - 3);
+                brightness = 0.5f * (1.0f - fadePosition);
             }
 
             // Apply breathing effect to the brightness
             brightness *= breathingMultiplier;
+
+            // Start with base red color for the entire trail
+            uint8_t redValue = 255 * brightness;
+            uint8_t greenValue = 0;  // Start with pure red
+
+            // Add orange overlay for the first 35% of the trail (shooting star tip)
+            float orangeZoneLength = TRAIL_LENGTH * 0.35f; // 35% of trail length
+            if (i < orangeZoneLength) {
+                // Calculate how far we are into the orange zone (0.0 at tip, 1.0 at end of orange zone)
+                float orangePosition = (float)i / orangeZoneLength;
+
+                // Square the position for quicker orange fade
+                float orangeFade = orangePosition * orangePosition;
+
+                // Add green component for orange color, fading from 35 to 0 (quarter of original brightness)
+                greenValue = (uint8_t)(35 * (1.0f - orangeFade) * brightness);
+            }
+
+            CRGB color = CRGB(redValue, greenValue, 0);
 
             // Physical position calculation
             int physicalPos = leds.mapPositionToPhysical(trail.stripType, pixelPos, trail.subStrip);
@@ -469,10 +445,6 @@ void CodeRedEffect::drawTrails() {
                 // Outer strips
                 physicalPos += trail.subStrip * OUTER_LEDS_PER_STRIP;
             }
-
-            // Pure red color for all LEDs in the trail
-            uint8_t redValue = 255 * brightness;
-            CRGB color = CRGB(redValue, 0, 0);
 
             // Apply fade-to-black mask for outer strips only
             if (trail.stripType == 2) {
