@@ -456,7 +456,7 @@ void FutureEffect::applyBreathingEffect() {
     for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
         // Apply shimmer multiplier to create dazzling effect
         float shimmerMultiplier = coreShimmerValues[i];
-        float finalIntensity = normalizedSine * shimmerMultiplier;
+        float finalIntensity = (0.1f + normalizedSine * 0.9f) * shimmerMultiplier;
 
         // Ensure we don't exceed maximum brightness
         finalIntensity = min(1.0f, finalIntensity);
