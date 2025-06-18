@@ -32,6 +32,7 @@ void GradientEffect::reset() {
     // Nothing to reset
 }
 
+// Updated update method to include black fade overlay for outer strips
 void GradientEffect::update() {
     // Apply gradients to each strip
     applyGradient(leds.getCore(), LED_STRIP_CORE_COUNT, coreGradient);
@@ -40,8 +41,84 @@ void GradientEffect::update() {
     if (!skipRing)
         applyGradient(leds.getRing(), LED_STRIP_RING_COUNT, ringGradient);
 
+    // Apply black fade overlay to outer strips (like fire effects)
+    applyOuterBlackFadeOverlay();
+
     // Show all changes
     leds.showAll();
+}
+// Apply black fade overlay to outer strips for ambient lighting effect
+void GradientEffect::applyOuterBlackFadeOverlay() {
+    // Only apply if outer gradient is not empty (outer strips are active)
+    if (outerGradient.empty()) {
+        return;
+    }
+
+    // Apply fade-to-black overlay to outer strips
+    for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
+        int segmentStart = segment * OUTER_LEDS_PER_STRIP;
+
+        for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
+            int ledIndex = segmentStart + i;
+
+            // Calculate fade starting at 45% up the strip (like fire effects)
+            float fadeStartPosition = OUTER_LEDS_PER_STRIP * 0.45f;
+
+            if (i >= fadeStartPosition) {
+                // Calculate fade progress from fade start to top of strip
+                float fadeProgress = (float(i) - fadeStartPosition) / (OUTER_LEDS_PER_STRIP - fadeStartPosition);
+
+                // Apply aggressive cubic fade for dramatic black transition
+                fadeProgress = fadeProgress * fadeProgress * fadeProgress;
+
+                // Calculate fade factor (1.0 = full brightness, 0.0 = black)
+                float fadeFactor = 1.0f - fadeProgress;
+
+                // Apply fade to the existing LED color
+                leds.getOuter()[ledIndex].nscale8_video((uint8_t)(255 * fadeFactor));
+
+                // Force top 10% of strip to be completely black
+                if (i >= OUTER_LEDS_PER_STRIP * 0.90f) {
+                    leds.getOuter()[ledIndex] = CRGB::Black;
+                }
+            }
+        }
+    }
+}
+// Static method to create first half of rainbow (red to cyan)
+Gradient GradientEffect::createFirstHalfRainbowGradient() {
+    Gradient gradient;
+
+    // Red (hue 0)
+    gradient.push_back(GradientPoint(0xFF0000, 0.0f));
+    // Orange (hue 32)
+    gradient.push_back(GradientPoint(0xFF8000, 0.25f));
+    // Yellow (hue 64)
+    gradient.push_back(GradientPoint(0xFFFF00, 0.5f));
+    // Green (hue 96)
+    gradient.push_back(GradientPoint(0x00FF00, 0.75f));
+    // Cyan (hue 128)
+    gradient.push_back(GradientPoint(0x00FFFF, 1.0f));
+
+    return gradient;
+}
+
+// Static method to create second half of rainbow (cyan to red)
+Gradient GradientEffect::createSecondHalfRainbowGradient() {
+    Gradient gradient;
+
+    // Cyan (hue 128)
+    gradient.push_back(GradientPoint(0x00FFFF, 0.0f));
+    // Blue (hue 160)
+    gradient.push_back(GradientPoint(0x0000FF, 0.25f));
+    // Purple (hue 192)
+    gradient.push_back(GradientPoint(0x8000FF, 0.5f));
+    // Magenta (hue 224)
+    gradient.push_back(GradientPoint(0xFF00FF, 0.75f));
+    // Red (hue 255/0)
+    gradient.push_back(GradientPoint(0xFF0000, 1.0f));
+
+    return gradient;
 }
 
 void GradientEffect::setCoreGradient(const Gradient &gradient) {
@@ -243,16 +320,14 @@ Gradient GradientEffect::createBlueToWhiteGradient() {
 Gradient GradientEffect::createSunsetGradient() {
     Gradient gradient;
 
-    // Yellow at the bottom
-    gradient.push_back(GradientPoint(0xFFFF00, 0.0f));
-    // Orange
-    gradient.push_back(GradientPoint(0xFF8800, 0.25f));
-    // Deep orange/red
-    gradient.push_back(GradientPoint(0xFF4400, 0.5f));
-    // Pink/rose
-    gradient.push_back(GradientPoint(0xFF0088, 0.75f));
-    // Purple at the top
-    gradient.push_back(GradientPoint(0x800080, 1.0f));
+    // Dark navy blue at the bottom
+    gradient.push_back(GradientPoint(0x0B1426, 0.0f));
+    // Medium blue
+    gradient.push_back(GradientPoint(0x1E3A5F, 0.33f));
+    // Light peach
+    gradient.push_back(GradientPoint(0xFFCBA4, 0.67f));
+    // Bright peach at the top
+    gradient.push_back(GradientPoint(0xFFB07A, 1.0f));
 
     return gradient;
 }
@@ -297,26 +372,33 @@ Gradient GradientEffect::createCoreChristmasGradient() {
     return gradient;
 }
 
-// Static method to create purple to blue gradient
 Gradient GradientEffect::createPurpleToBlueGradient() {
     Gradient gradient;
 
-    // Purple
-    gradient.push_back(GradientPoint(0x800080, 0.0f));
-    // Blue
-    gradient.push_back(GradientPoint(0x0000FF, 1.0f));
+    // Deep blue-purple (dark indigo) - start
+    gradient.push_back(GradientPoint(0x2E1A47, 0.0f));
+    // Medium purple-blue blend - 1/3 position
+    gradient.push_back(GradientPoint(0x4A2C6A, 0.33f));
+    // Warm orange (sunset orange) - 2/3 position
+    gradient.push_back(GradientPoint(0xFF6B35, 0.67f));
+    // Bright sunset orange - end
+    gradient.push_back(GradientPoint(0xFF8C42, 1.0f));
 
     return gradient;
 }
 
-// Static method to create blue to purple gradient (reversed)
+// Static method to create blue to purple gradient (reversed - now sunset orange to deep blue/purple)
 Gradient GradientEffect::createBlueToPurpleGradient() {
     Gradient gradient;
 
-    // Blue
-    gradient.push_back(GradientPoint(0x0000FF, 0.0f));
-    // Purple
-    gradient.push_back(GradientPoint(0x800080, 1.0f));
+    // Bright sunset orange - start
+    gradient.push_back(GradientPoint(0xFF8C42, 0.0f));
+    // Warm orange (sunset orange) - 1/3 position
+    gradient.push_back(GradientPoint(0xFF6B35, 0.33f));
+    // Medium purple-blue blend - 2/3 position
+    gradient.push_back(GradientPoint(0x4A2C6A, 0.67f));
+    // Deep blue-purple (dark indigo) - end
+    gradient.push_back(GradientPoint(0x2E1A47, 1.0f));
 
     return gradient;
 }

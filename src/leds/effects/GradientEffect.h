@@ -52,6 +52,8 @@ public:
 
     // Predefined gradients for easy use
     static Gradient createRainbowGradient(int numPoints = 6);
+    static Gradient createFirstHalfRainbowGradient();    // Red to cyan (first half of spectrum)
+    static Gradient createSecondHalfRainbowGradient();   // Cyan to red (second half of spectrum)
     static Gradient createFireGradient();
     static Gradient createBlueToWhiteGradient();
     static Gradient createSunsetGradient();
@@ -73,6 +75,7 @@ private:
     // Helper methods
     void applyGradient(CRGB* strip, int count, const Gradient& gradient);
     void applyGradientToPosition(CRGB* strip, int index, float position, const Gradient& gradient);
+    void applyOuterBlackFadeOverlay();  // Apply black fade overlay to outer strips for ambient effect
     CRGB interpolateColors(const CRGB& color1, const CRGB& color2, float ratio);
 };
 

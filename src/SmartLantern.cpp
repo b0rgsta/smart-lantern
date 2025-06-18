@@ -81,6 +81,13 @@ void SmartLantern::initializeEffects() {
         true,   // outer enabled
         false   // ring disabled
     );
+    auto splitRainbowGradient = new GradientEffect(
+    leds,
+    Gradient(),                                      // Core off
+    GradientEffect::createFirstHalfRainbowGradient(), // Inner: Red to Cyan
+    GradientEffect::createSecondHalfRainbowGradient(), // Outer: Cyan to Red
+    Gradient()                                       // Ring off
+);
     auto fireEffect = new FireEffect(leds);
     auto suspendedFireEffect = new SuspendedFireEffect(leds);
     auto matrixEffect = new MatrixEffect(leds);
@@ -180,8 +187,8 @@ void SmartLantern::initializeEffects() {
     );
 
     effects[MODE_GRADIENT].push_back(purpleBlueOpposingGradient);
-    effects[MODE_GRADIENT].push_back(opposingRainbowGradient);
     effects[MODE_GRADIENT].push_back(sunsetGradient);
+    effects[MODE_GRADIENT].push_back(splitRainbowGradient);
     effects[MODE_GRADIENT].push_back(christmasGradient);
 
     // MODE_ANIMATED

@@ -348,16 +348,32 @@ void AuraEffect::drawRipples() {
 }
 
 CRGB AuraEffect::generateRandomColor() {
-    // Generate vibrant colors using HSV color space
-    // Random hue for variety, full saturation for vibrancy
-    uint8_t hue = random(256);      // Random hue (0-255)
+    // Calculate current time for rotation
+    unsigned long currentTime = millis();
+
+    // Rotate the color wheel once every 30 seconds (30,000 milliseconds)
+    // This gives us the starting hue offset for our 3/5 section
+    float rotationProgress = (currentTime % 30000) / 30000.0f; // 0.0 to 1.0 over 30 seconds
+    uint8_t sectionStartHue = (uint8_t)(rotationProgress * 255); // Starting hue for our section
+
+    // Calculate the size of 3/5 of the color wheel
+    // Full wheel = 255 hue values, so 3/5 = 153 hue values
+    uint8_t sectionSize = (uint8_t)(255 * 0.6f); // 3/5 of 255 = 153
+
+    // Choose a random position within our 3/5 section
+    uint8_t randomOffset = random(sectionSize); // 0 to 152
+
+    // Calculate final hue by adding the random offset to our section start
+    uint8_t finalHue = sectionStartHue + randomOffset;
+    // No need to wrap around since we're using uint8_t (automatically wraps at 255)
+
+    // Keep full saturation and brightness for vibrant colors
     uint8_t saturation = 255;       // Full saturation for bright colors
     uint8_t value = 255;            // Full brightness
 
     // Convert HSV to RGB
-    return CHSV(hue, saturation, value);
+    return CHSV(finalHue, saturation, value);
 }
-
 float AuraEffect::calculateRippleBrightness(float distance, float radius, float fadeOut) {
     // If this LED is outside the current ripple radius, it's off
     if (distance > radius) {
