@@ -20,6 +20,7 @@
 #include "leds/effects/EmeraldCityEffect.h"
 #include "leds/effects/SuspendedFireEffect.h"
 #include "leds/effects/SuspendedPartyFireEffect.h"
+#include "leds/effects/LustEffect.h"
 
 SmartLantern::SmartLantern() :
     buttonFeedback(leds),
@@ -89,6 +90,7 @@ void SmartLantern::initializeEffects() {
     auto partyFireEffect = new PartyFireEffect(leds);
     auto rgbPatternEffect = new RgbPatternEffect(leds);
     auto suspendedPartyFireEffect = new SuspendedPartyFireEffect(leds);
+    auto lustEffect = new LustEffect(leds);
     auto partyRippleEffect = new AuraEffect(leds,
         false,   // Core on
         true,   // Inner on
@@ -189,6 +191,7 @@ void SmartLantern::initializeEffects() {
     effects[MODE_ANIMATED].push_back(partyRippleEffect);
 
     // MODE_PARTY
+    effects[MODE_PARTY].push_back(lustEffect); // Add the new Lust effect
     effects[MODE_PARTY].push_back(emeraldCityEffect); // Add Emerald City effect
     effects[MODE_PARTY].push_back(suspendedPartyFireEffect);
     effects[MODE_PARTY].push_back(coreGrowEffect); // Core ripple
@@ -200,6 +203,7 @@ void SmartLantern::initializeEffects() {
     effects[MODE_PARTY].push_back(futureEffect);
     effects[MODE_PARTY].push_back(futureRainbowEffect);
     effects[MODE_PARTY].push_back(rgbPatternEffect); // Add the new RGB pattern effect
+
 }
 
 void SmartLantern::begin() {
