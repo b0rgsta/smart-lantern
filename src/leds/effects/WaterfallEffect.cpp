@@ -86,9 +86,16 @@ void WaterfallEffect::fillBackgroundWater() {
         leds.getOuter()[i] = backgroundWater;
     }
 
-    // Core and ring strips stay off to focus on the waterfall
-}
+    // FIX: Clear core and ring strips explicitly when waterfall starts
+    // This ensures no leftover colors from previous effects remain
+    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
+        leds.getCore()[i] = CRGB::Black;  // Turn off core LEDs completely
+    }
 
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        leds.getRing()[i] = CRGB::Black;  // Turn off ring LEDs completely
+    }
+}
 void WaterfallEffect::createNewDrop() {
     // Find an inactive drop slot to use
     for (auto& drop : waterDrops) {
