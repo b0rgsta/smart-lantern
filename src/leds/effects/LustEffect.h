@@ -50,13 +50,13 @@ public:
 private:
     // Color definitions - two color sets that will animate between each other
     static constexpr uint32_t HOT_PINK_RED_SET1 = 0xFF4569;     // Hot pink with orange undertones (original)
-    static constexpr uint32_t DEEP_PURPLE_BLUE_SET1 = 0x2E0080; // Deep blue with purple undertones (original)
+    static constexpr uint32_t DEEP_PURPLE_BLUE_SET1 = 0x4A00B0; // More purple-blue (increased purple component)
     static constexpr uint32_t HOT_PINK_RED_SET2 = 0xFF0000;     // Pure red
-    static constexpr uint32_t DEEP_PURPLE_BLUE_SET2 = 0x0000FF; // Pure blue
+    static constexpr uint32_t DEEP_PURPLE_BLUE_SET2 = 0x6600FF; // Purple-blue instead of pure blue
 
     // Current blended colors (halfway between the two sets)
     static constexpr uint32_t HOT_PINK_RED = 0xFF2234;          // Halfway blend
-    static constexpr uint32_t DEEP_PURPLE_BLUE = 0x170040;     // Halfway blend
+    static constexpr uint32_t DEEP_PURPLE_BLUE = 0x550058;     // Updated halfway blend with more purple
 
     // Animation timing constants
     static constexpr unsigned long CYCLE_DURATION = 4000;  // Total cycle time (4 seconds)
