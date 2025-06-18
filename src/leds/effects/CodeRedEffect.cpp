@@ -111,14 +111,26 @@ void CodeRedEffect::update() {
         // During growing phase, draw centered pattern on all segments
         int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
         for (int segment = 0; segment < 3; segment++) {
-            int segmentBaseCenter = segment * coreSegmentLength + coreSegmentLength / 2;
+            // Apply segment-specific centering offsets
+            int segmentOffset = -2; // Default offset for segments 0 and 2
+            if (segment == 1) {
+                segmentOffset = 0; // Middle segment needs different offset
+            }
+
+            int segmentBaseCenter = segment * coreSegmentLength + coreSegmentLength / 2 + segmentOffset;
             drawPattern(segment, segmentBaseCenter);
         }
     } else {
         // During moving phase, draw two moving patterns on all segments
         int coreSegmentLength = LED_STRIP_CORE_COUNT / 3;
         for (int segment = 0; segment < 3; segment++) {
-            int segmentBaseCenter = segment * coreSegmentLength + coreSegmentLength / 2;
+            // Apply segment-specific centering offsets
+            int segmentOffset = -2; // Default offset for segments 0 and 2
+            if (segment == 1) {
+                segmentOffset = 0; // Middle segment needs different offset
+            }
+
+            int segmentBaseCenter = segment * coreSegmentLength + coreSegmentLength / 2 + segmentOffset;
 
             // Calculate pattern positions for this segment
             int segmentLeftPos = segmentBaseCenter + (leftPosition - coreSegmentLength / 2);
