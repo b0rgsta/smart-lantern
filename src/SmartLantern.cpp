@@ -19,6 +19,7 @@
 #include "leds/effects/RgbPatternEffect.h"
 #include "leds/effects/EmeraldCityEffect.h"
 #include "leds/effects/SuspendedFireEffect.h"
+#include "leds/effects/SuspendedPartyFireEffect.h"
 
 SmartLantern::SmartLantern() :
     buttonFeedback(leds),
@@ -87,6 +88,7 @@ void SmartLantern::initializeEffects() {
     auto rainbowTranceEffect = new RainbowTranceEffect(leds);
     auto partyFireEffect = new PartyFireEffect(leds);
     auto rgbPatternEffect = new RgbPatternEffect(leds);
+    auto suspendedPartyFireEffect = new SuspendedPartyFireEffect(leds);
     auto partyRippleEffect = new AuraEffect(leds,
         false,   // Core on
         true,   // Inner on
@@ -188,6 +190,7 @@ void SmartLantern::initializeEffects() {
     effects[MODE_ANIMATED].push_back(partyRippleEffect);
 
     // MODE_PARTY
+    effects[MODE_PARTY].push_back(suspendedPartyFireEffect);
     effects[MODE_PARTY].push_back(coreGrowEffect); // Core ripple
     effects[MODE_PARTY].push_back(matrixEffect); // Matrix
     effects[MODE_PARTY].push_back(technoOrangeEffect);
