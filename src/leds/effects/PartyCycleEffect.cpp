@@ -55,6 +55,9 @@ void PartyCycleEffect::update() {
             startTransition();
         }
     }
+
+    // Add rainbow notification to ring after effects update
+    addRainbowRingNotification();
 }
 
 void PartyCycleEffect::startTransition() {
@@ -161,7 +164,7 @@ void PartyCycleEffect::updateTransition() {
     // Finally show the blended result - only we control when LEDs update
     leds.showAll();
 
-    // Debug
+    // Debug: Print progress occasionally
     static unsigned long lastProgressPrint = 0;
     if (millis() - lastProgressPrint > 1000) {
         Serial.println("Smooth transition: " + String(smoothProgress * 100.0f, 1) + "%");
@@ -236,5 +239,64 @@ void PartyCycleEffect::blendEffectsOptimized(float fadeProgress) {
                 ((oldEffectLEDs.ring[i].b * oldRatio) + (newEffectLEDs.ring[i].b * newRatio)) >> 8
             );
         }
+    }
+}
+
+void PartyCycleEffect::addRainbowRingNotification() {
+    // Skip ring updates if button feedback is active to avoid conflicts
+    if (skipRing) {
+        return;
+    }
+
+    // Notification section is LEDs 11-22 (12 LEDs total) from MPR121LEDHandler
+    static const int NOTIFICATION_START = 11;
+    static const int NOTIFICATION_END = 22;
+    static const int NOTIFICATION_COUNT = 12;
+
+    // Representative colors for each party effect (based on SmartLantern.cpp order)
+    // partyEffectsForCycling order: lust, emerald, suspendedPartyFire, codeRed, matrix,
+    // technoOrange, rainbowTrance, partyFire, rainbow, future, futureRainbow, rgbPattern
+    CRGB effectColors[] = {
+        CRGB(255, 20, 147),    // Lust Effect - Deep pink/magenta
+        CRGB(0, 255, 127),     // Emerald City - Emerald green
+        CRGB(255, 69, 0),      // Suspended Party Fire - Orange red
+        CRGB(220, 20, 60),     // Code Red - Crimson red
+        CRGB(0, 255, 0),       // Matrix - Bright green
+        CRGB(255, 140, 0),     // Techno Orange (Regal) - Dark orange
+        CRGB(138, 43, 226),    // Rainbow Trance - Blue violet
+        CRGB(255, 0, 0),       // Party Fire - Red
+        CRGB(255, 255, 0),     // Rainbow - Yellow (center of rainbow)
+        CRGB(0, 191, 255),     // Future - Deep sky blue
+        CRGB(255, 0, 255),     // Future Rainbow - Magenta
+        CRGB(128, 0, 128)      // RGB Pattern - Purple
+    };
+
+    int numEffects = sizeof(effectColors) / sizeof(effectColors[0]);
+
+    // Get current time for animation
+    unsigned long currentTime = millis();
+
+    // Create a subtle breathing effect that cycles every 4 seconds
+    float breathePhase = (currentTime % 4000) / 4000.0f * 2.0f * PI; // 0 to 2*PI over 4 seconds
+    float breatheIntensity = (sin(breathePhase) + 1.0f) / 2.0f; // 0.0 to 1.0
+    uint8_t brightness = 120 + (uint8_t)(breatheIntensity * 80); // 120 to 200 brightness range
+
+    // Distribute effect colors across the notification LEDs
+    for (int i = 0; i < NOTIFICATION_COUNT; i++) {
+        int ringIndex = NOTIFICATION_START + i;
+
+        // Map LED position to effect index
+        // This spreads all effects across the 12 LEDs
+        int effectIndex = (i * numEffects) / NOTIFICATION_COUNT;
+        if (effectIndex >= numEffects) effectIndex = numEffects - 1;
+
+        // Get the base color for this effect
+        CRGB baseColor = effectColors[effectIndex];
+
+        // Apply breathing brightness
+        baseColor.nscale8_video(brightness);
+
+        // Set the LED
+        leds.getRing()[ringIndex] = baseColor;
     }
 }

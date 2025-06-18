@@ -292,6 +292,38 @@ void SmartLantern::update() {
     // Handle auto on/off based on light sensor
     handleAutoLighting();
 
+    // IMPORTANT: Check if button feedback is active before running effects
+    bool feedbackActive = buttonFeedback.isFeedbackActive();
+
+    // Tell ALL effects to skip ring updates when button feedback is showing
+    if (feedbackActive) {
+        // Set skipRing flag on ALL effects in ALL modes to prevent ring conflicts
+        for (auto &modeEffects : effects) {
+            for (auto effect : modeEffects) {
+                if (effect != nullptr) {
+                    effect->setSkipRing(true);
+                }
+            }
+        }
+        // Also set it on the fire effect pointer used for temperature override
+        if (fireEffectPtr != nullptr) {
+            fireEffectPtr->setSkipRing(true);
+        }
+    } else {
+        // Clear skipRing flag on ALL effects when no button feedback
+        for (auto &modeEffects : effects) {
+            for (auto effect : modeEffects) {
+                if (effect != nullptr) {
+                    effect->setSkipRing(false);
+                }
+            }
+        }
+        // Also clear it on the fire effect pointer
+        if (fireEffectPtr != nullptr) {
+            fireEffectPtr->setSkipRing(false);
+        }
+    }
+
     // If we're in wind-down mode, handle that instead of normal effects
     if (isWindingDown) {
         updateWindDown();
@@ -300,9 +332,8 @@ void SmartLantern::update() {
         updateEffects();
     }
 
-    // IMPORTANT: Update button feedback AFTER effects are drawn
-    // This ensures button feedback stays visible for the full duration
-    // and isn't cleared early by the effects
+    // Update button feedback AFTER effects are drawn
+    // This ensures button feedback timing is managed correctly
     buttonFeedback.update();
 }
 
@@ -344,48 +375,21 @@ void SmartLantern::nextMode() {
     String modeNames[] = {"OFF", "AMBIENT", "GRADIENT", "ANIMATED", "PARTY"};
     Serial.println("Mode changed to: " + modeNames[currentMode]);
 
-    // Reset the new effect to ensure clean start
+    // Reset the new effect to its initial state
     if (!effects[currentMode].empty() && currentEffect < effects[currentMode].size()) {
         effects[currentMode][currentEffect]->reset();
     }
-    Serial.println("Effect reset to: " + effects[currentMode][currentEffect]->getName());
 }
 
 void SmartLantern::setPower(bool on) {
-    if (on != isPowerOn) {
-        if (on) {
-            // Turning ON - restore previous mode and effect (don't override them)
-            isPowerOn = true;
-            isWindingDown = false; // Make sure wind-down is off
-
-            // Load saved settings with sensible defaults
-            auto savedMode = static_cast<LanternMode>(preferences.getUChar("mode", MODE_AMBIENT));
-            int savedEffect = preferences.getUChar("effect", 0);
-            tempButtonState = preferences.getUChar("tempBtn", 0);
-            lightButtonState = preferences.getUChar("lightBtn", 0);
-
-            // Set mode and effect (default to Ambient white if no valid saved data)
-            if (savedMode >= MODE_OFF && savedMode <= MODE_PARTY) {
-                currentMode = savedMode;
-            } else {
-                currentMode = MODE_AMBIENT; // Default to Ambient
-            }
-
-            if (savedEffect >= 0 && savedEffect <= 4) {
-                currentEffect = savedEffect;
-            } else {
-                currentEffect = 0; // Default to first effect (white for Ambient mode)
-            }
-
-            Serial.print("Power turned ON - restored to mode: ");
-            Serial.print(currentMode);
-            Serial.print(", effect: ");
-            Serial.println(currentEffect);
-        } else {
-            // Turning OFF - start wind-down animation
-            startWindDown();
-            Serial.println("Starting power wind-down sequence");
-        }
+    if (on && !isPowerOn) {
+        // Turning ON
+        isPowerOn = true;
+        Serial.println("Smart Lantern powered ON");
+    } else if (!on && isPowerOn) {
+        // Turning OFF - start the wind-down sequence
+        startWindDown();
+        Serial.println("Smart Lantern powering OFF (wind-down started)");
     }
 }
 
@@ -393,11 +397,31 @@ void SmartLantern::togglePower() {
     setPower(!isPowerOn);
 }
 
-void SmartLantern::updateEffects() {
-    // Don't update effects if power is off
-    if (!isPowerOn && !isAutoOn) return;
+void SmartLantern::updateBrightnessFromTOF() {
+    int distance = sensors.getDistance();
 
-    // Check if temperature button is active and temperature is low
+    if (distance > 0) {
+        // Map distance to brightness (closer = brighter)
+        // Distance range: 50-800mm
+        // Brightness range: 77-255 (30%-100%)
+
+        int brightness;
+        if (distance <= 50) {
+            brightness = 255; // Max brightness when very close
+        } else if (distance >= 800) {
+            brightness = 77; // Min brightness when far
+        } else {
+            // Linear mapping: closer distance = higher brightness
+            brightness = map(distance, 800, 50, 77, 255);
+        }
+
+        leds.setBrightness(brightness);
+    }
+    // If distance is -1 (no reading), don't change brightness
+}
+
+void SmartLantern::updateEffects() {
+    // Check for temperature override
     if (tempButtonState > 0) {
         float temperature = sensors.getTemperature();
         bool shouldShowFire = false;
@@ -561,9 +585,10 @@ void SmartLantern::processTouchInputs() {
                 nextEffect();
                 effectButtonToggled = true;
 
-                // Show effect feedback using showEffectSelection
+                // Show effect feedback using showEffectSelectionSmart
                 int numEffects = effects[currentMode].size();
-                buttonFeedback.showEffectSelection(currentEffect, numEffects);
+                bool isPartyMode = (currentMode == MODE_PARTY);
+                buttonFeedback.showEffectSelectionSmart(currentEffect, numEffects, isPartyMode);
             }
         }
     } else {
@@ -675,24 +700,16 @@ void SmartLantern::updateWindDown() {
         leds.getCore()[clearPos] = CRGB::Black;
     }
 
-    // Inner strips - clear each segment from end to start
-    for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
-        if (windDownPosition < INNER_LEDS_PER_STRIP) {
-            int clearPos = (segment * INNER_LEDS_PER_STRIP) + (INNER_LEDS_PER_STRIP - 1 - windDownPosition);
-            if (clearPos < LED_STRIP_INNER_COUNT) {
-                leds.getInner()[clearPos] = CRGB::Black;
-            }
-        }
+    // Inner strips - clear from end to start
+    if (windDownPosition < LED_STRIP_INNER_COUNT) {
+        int clearPos = LED_STRIP_INNER_COUNT - 1 - windDownPosition;
+        leds.getInner()[clearPos] = CRGB::Black;
     }
 
-    // Outer strips - clear each segment from end to start
-    for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
-        if (windDownPosition < OUTER_LEDS_PER_STRIP) {
-            int clearPos = (segment * OUTER_LEDS_PER_STRIP) + (OUTER_LEDS_PER_STRIP - 1 - windDownPosition);
-            if (clearPos < LED_STRIP_OUTER_COUNT) {
-                leds.getOuter()[clearPos] = CRGB::Black;
-            }
-        }
+    // Outer strips - clear from end to start
+    if (windDownPosition < LED_STRIP_OUTER_COUNT) {
+        int clearPos = LED_STRIP_OUTER_COUNT - 1 - windDownPosition;
+        leds.getOuter()[clearPos] = CRGB::Black;
     }
 
     // Ring strip - clear from end to start
@@ -701,45 +718,9 @@ void SmartLantern::updateWindDown() {
         leds.getRing()[clearPos] = CRGB::Black;
     }
 
-    // Show the updated LEDs
+    // Show the current wind-down state
     leds.showAll();
 
     // Move to next position
     windDownPosition++;
-}
-
-void SmartLantern::updateBrightnessFromTOF() {
-    // Get distance from TOF sensor
-    int distance = sensors.getDistance();
-
-    // Only adjust brightness if a hand is detected (distance < 400mm)
-    if (distance > 0 && distance < 400) {
-        // Get orientation to determine gesture direction
-        bool isUpsideDown = sensors.isUpsideDown();
-
-        // Map distance to brightness (25-255 range for good visibility)
-        int brightness;
-
-        if (isUpsideDown) {
-            // When upside down, closer = dimmer (inverted gesture)
-            brightness = map(distance, 50, 350, 255, 25);
-        } else {
-            // When right-side up, farther = brighter (normal gesture)
-            brightness = map(distance, 50, 350, 25, 255);
-        }
-
-        // Constrain brightness to valid range
-        brightness = constrain(brightness, 25, 255);
-
-        // Set the brightness
-        leds.setBrightness(brightness);
-
-        // Optional: uncomment for debugging
-        // Serial.print("Distance: ");
-        // Serial.print(distance);
-        // Serial.print("mm, Brightness: ");
-        // Serial.print(brightness);
-        // Serial.print(", Upside down: ");
-        // Serial.println(isUpsideDown ? "Yes" : "No");
-    }
 }

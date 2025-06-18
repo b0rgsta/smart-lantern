@@ -92,6 +92,30 @@ void MPR121LEDHandler::showEffectSelection(int currentEffect, int totalEffects, 
     Serial.println(totalEffects);
 }
 
+void MPR121LEDHandler::showEffectSelectionSmart(int currentEffect, int totalEffects, bool isPartyMode, unsigned long showTime) {
+    // Set up feedback timing
+    feedbackStartTime = millis();
+    feedbackDuration = showTime;
+    feedbackActive = true;
+
+    // Check if this is the party cycle effect (index 0 in party mode)
+    if (isPartyMode && currentEffect == 0) {
+        // Use special party cycle display
+        applyPartyCycleDisplay();
+        Serial.println("Effect selection feedback: Party Cycle (All Effects)");
+    } else {
+        // Use normal selection display for all other effects
+        applySelectionToRing(currentEffect, totalEffects);
+        Serial.print("Effect selection feedback: ");
+        Serial.print(currentEffect + 1);
+        Serial.print(" of ");
+        Serial.println(totalEffects);
+    }
+
+    // Show the changes immediately
+    leds.showAll();
+}
+
 void MPR121LEDHandler::update() {
     // Check if feedback should be cleared due to timeout
     if (feedbackActive) {
@@ -106,7 +130,7 @@ void MPR121LEDHandler::update() {
 
 void MPR121LEDHandler::clearFeedback() {
     if (feedbackActive) {
-        // Clear only the button face LEDs (38-55) on the ring
+        // Clear only the button face LEDs (11-22) on the ring
         for (int i = BUTTON_FACE_START; i <= BUTTON_FACE_END; i++) {
             leds.getRing()[i] = CRGB::Black;
         }
@@ -128,54 +152,49 @@ bool MPR121LEDHandler::isFeedbackActive() const {
 uint32_t MPR121LEDHandler::getStateColor(int state) {
     // Return appropriate color based on state
     switch (constrain(state, 0, 3)) {
-        case 0:  return STATE_OFF_COLOR;   // Red for off
-        case 1:  return STATE_LOW_COLOR;   // Blue for low
-        case 2:  return STATE_MED_COLOR;   // Yellow for medium
-        case 3:  return STATE_HIGH_COLOR;  // Orange for high
-        default: return STATE_OFF_COLOR;   // Default to red
+        case 0:  return STATE_OFF_COLOR;    // Red
+        case 1:  return STATE_LOW_COLOR;    // Blue
+        case 2:  return STATE_MED_COLOR;    // Yellow
+        case 3:  return STATE_HIGH_COLOR;   // Orange
+        default: return STATE_OFF_COLOR;    // Fallback to red
     }
 }
 
 uint8_t MPR121LEDHandler::calculateBellCurveBrightness(int position) {
-    // Calculate bell curve (Gaussian distribution) for smooth brightness falloff
+    // Calculate bell curve brightness for the button face
     // Position should be 0 to BUTTON_FACE_COUNT-1
 
-    // Center of the bell curve (middle of button face)
+    // Center position of the bell curve
     float center = (BUTTON_FACE_COUNT - 1) / 2.0f;
 
-    // Standard deviation - controls width of bell curve
-    // Smaller value = sharper peak, larger value = wider spread
-    float standardDeviation = BUTTON_FACE_COUNT / 4.0f;
+    // Calculate distance from center
+    float distance = abs(position - center);
 
-    // Distance from center
-    float distance = position - center;
+    // Bell curve calculation (Gaussian-like)
+    // Using a simpler formula: brightness = max * exp(-distance^2 / width^2)
+    float width = BUTTON_FACE_COUNT / 3.0f; // Controls the width of the bell
+    float normalizedDistance = distance / width;
+    float brightness = exp(-normalizedDistance * normalizedDistance);
 
-    // Calculate Gaussian function: e^(-(distance^2)/(2*sigma^2))
-    float exponent = -(distance * distance) / (2 * standardDeviation * standardDeviation);
-    float gaussianValue = exp(exponent);
-
-    // Convert to brightness (0-255 range)
-    // Add minimum brightness so even edges are slightly visible
-    uint8_t minBrightness = 20;  // Minimum 8% brightness at edges
-    uint8_t maxBrightness = 255; // Full brightness at center
-
-    uint8_t brightness = minBrightness + (gaussianValue * (maxBrightness - minBrightness));
-
-    return brightness;
+    // Scale to 0-255 range with minimum brightness of 30
+    return (uint8_t)(30 + brightness * 225);
 }
 
 void MPR121LEDHandler::applyFeedbackToRing(uint32_t color) {
-    // First, clear the entire ring to ensure clean feedback display
+    // Convert 32-bit color to CRGB
+    CRGB baseColor = CRGB(
+        (color >> 16) & 0xFF,  // Red
+        (color >> 8) & 0xFF,   // Green
+        color & 0xFF           // Blue
+    );
+
+    // Clear the entire ring first
     for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
         leds.getRing()[i] = CRGB::Black;
     }
 
-    // Convert base color to CRGB for manipulation
-    CRGB baseColor = leds.neoColorToCRGB(color);
-
-    // Apply bell curve pattern to button face LEDs (38-55)
+    // Apply bell curve brightness across the button face
     for (int i = 0; i < BUTTON_FACE_COUNT; i++) {
-        // Calculate ring LED index
         int ringIndex = BUTTON_FACE_START + i;
 
         // Calculate brightness for this position using bell curve
@@ -238,41 +257,87 @@ void MPR121LEDHandler::applySelectionToRing(int selectedIndex, int totalItems) {
     }
 }
 
+void MPR121LEDHandler::applyPartyCycleDisplay() {
+    // First, clear the entire ring to ensure clean display
+    for (int i = 0; i < LED_STRIP_RING_COUNT; i++) {
+        leds.getRing()[i] = CRGB::Black;
+    }
+
+    // Representative colors for each party effect (same as PartyCycleEffect)
+    // Order: lust, emerald, suspendedPartyFire, codeRed, matrix,
+    // technoOrange, rainbowTrance, partyFire, rainbow, future, futureRainbow, rgbPattern
+    CRGB effectColors[] = {
+        CRGB(255, 20, 147),    // Lust Effect - Deep pink/magenta
+        CRGB(0, 255, 127),     // Emerald City - Emerald green
+        CRGB(255, 69, 0),      // Suspended Party Fire - Orange red
+        CRGB(220, 20, 60),     // Code Red - Crimson red
+        CRGB(0, 255, 0),       // Matrix - Bright green
+        CRGB(255, 140, 0),     // Techno Orange (Regal) - Dark orange
+        CRGB(138, 43, 226),    // Rainbow Trance - Blue violet
+        CRGB(255, 0, 0),       // Party Fire - Red
+        CRGB(255, 255, 0),     // Rainbow - Yellow (center of rainbow)
+        CRGB(0, 191, 255),     // Future - Deep sky blue
+        CRGB(255, 0, 255),     // Future Rainbow - Magenta
+        CRGB(128, 0, 128)      // RGB Pattern - Purple
+    };
+
+    int numEffects = sizeof(effectColors) / sizeof(effectColors[0]);
+
+    // Static brightness for button feedback (no breathing during feedback)
+    uint8_t brightness = 180; // Bright enough to be clearly visible
+
+    // Distribute effect colors across the notification LEDs
+    for (int i = 0; i < BUTTON_FACE_COUNT; i++) {
+        int ringIndex = BUTTON_FACE_START + i;
+
+        // Map LED position to effect index
+        // This spreads all effects across the 12 LEDs
+        int effectIndex = (i * numEffects) / BUTTON_FACE_COUNT;
+        if (effectIndex >= numEffects) effectIndex = numEffects - 1;
+
+        // Get the base color for this effect
+        CRGB baseColor = effectColors[effectIndex];
+
+        // Apply consistent brightness
+        baseColor.nscale8_video(brightness);
+
+        // Set the LED
+        leds.getRing()[ringIndex] = baseColor;
+    }
+}
+
 CRGB MPR121LEDHandler::getItemColor(int itemIndex, int totalItems) {
-    // Calculate hue based on position in the spectrum
-    // We spread the items evenly across the full hue range (0-255 in FastLED)
+    // Generate a color for the item using hue spectrum
+    // Map item index to hue (0-255 in FastLED)
     uint8_t hue = (itemIndex * 255) / totalItems;
 
-    // Return color with full saturation and brightness
-    // The brightness will be adjusted later by the mini bell curve
-    return CHSV(hue, 255, 255);
+    // Use full saturation and brightness
+    CHSV hsvColor(hue, 255, 200); // Bright but not max to avoid overpowering
+
+    // Convert to RGB
+    CRGB rgbColor;
+    hsv2rgb_rainbow(hsvColor, rgbColor);
+
+    return rgbColor;
 }
 
 uint8_t MPR121LEDHandler::calculateMiniBellCurveBrightness(int position, int groupSize) {
-    // For very small groups, just return full brightness
+    // Calculate bell curve brightness for a small group of LEDs
     if (groupSize <= 1) {
-        return 255;
+        return 255; // Single LED gets full brightness
     }
 
-    // Calculate bell curve for this mini group
-    // Center of the mini bell curve
+    // Center position of the mini bell curve
     float center = (groupSize - 1) / 2.0f;
 
-    // Smaller standard deviation for tighter bell curve
-    float standardDeviation = groupSize / 3.0f;
+    // Calculate distance from center
+    float distance = abs(position - center);
 
-    // Distance from center
-    float distance = position - center;
+    // Bell curve calculation for small groups
+    float width = groupSize / 2.5f; // Controls the width of the mini bell
+    float normalizedDistance = distance / width;
+    float brightness = exp(-normalizedDistance * normalizedDistance);
 
-    // Calculate Gaussian function
-    float exponent = -(distance * distance) / (2 * standardDeviation * standardDeviation);
-    float gaussianValue = exp(exponent);
-
-    // Convert to brightness with higher minimum for visibility
-    uint8_t minBrightness = 100;  // Minimum 40% brightness at edges
-    uint8_t maxBrightness = 255;  // Full brightness at center
-
-    uint8_t brightness = minBrightness + (gaussianValue * (maxBrightness - minBrightness));
-
-    return brightness;
+    // Scale to 0-255 range with minimum brightness of 60 for small groups
+    return (uint8_t)(60 + brightness * 195);
 }

@@ -37,7 +37,7 @@ private:
     LEDSnapshot oldEffectLEDs;          // LEDs from the outgoing effect
     LEDSnapshot newEffectLEDs;          // LEDs from the incoming effect
 
-    static const unsigned long EFFECT_DURATION = 15000;    // 15 seconds per effect
+    static const unsigned long EFFECT_DURATION = 600000;   // 10 minutes per effect (600,000 ms)
     static const unsigned long TRANSITION_DURATION = 8000;  // 8 seconds transition
 
     /**
@@ -66,6 +66,12 @@ private:
      * @param fadeProgress Progress of fade (0.0 = full old, 1.0 = full new)
      */
     void blendEffectsOptimized(float fadeProgress);
+
+    /**
+     * Add representative colors to the notification section of the ring
+     * Shows colors representing each party effect that will be cycled through
+     */
+    void addRainbowRingNotification();
 };
 
 #endif // PARTY_CYCLE_EFFECT_H

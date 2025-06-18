@@ -15,7 +15,7 @@
  * The feedback shows the current state of temperature and light sensor buttons using
  * different colors and a bell curve brightness pattern.
  *
- * Button face range: LEDs 38-55 on the ring strip (18 LEDs total)
+ * Button face range: LEDs 11-22 on the ring strip (12 LEDs total)
  * Colors:
  * - Off state: Red
  * - Low state: Blue
@@ -61,6 +61,15 @@ public:
     void showEffectSelection(int currentEffect, int totalEffects, unsigned long showTime = 2000);
 
     /**
+     * Show effect selection feedback with special handling for party cycle
+     * @param currentEffect Current effect index (0-based)
+     * @param totalEffects Total number of available effects for current mode
+     * @param isPartyMode True if we're in party mode
+     * @param showTime How long to show the feedback in milliseconds (default 2000ms)
+     */
+    void showEffectSelectionSmart(int currentEffect, int totalEffects, bool isPartyMode, unsigned long showTime = 2000);
+
+    /**
      * Update the LED handler - call this every frame
      * This handles timing for when to clear feedback displays
      */
@@ -83,7 +92,7 @@ private:
     // Button face LED range on ring strip (our "display" area)
     static const int BUTTON_FACE_START = 11;    // First LED of button face
     static const int BUTTON_FACE_END = 22;      // Last LED of button face
-    static const int BUTTON_FACE_COUNT = 12;    // Total LEDs in button face (55-38+1)
+    static const int BUTTON_FACE_COUNT = 12;    // Total LEDs in button face
 
     // Feedback timing
     unsigned long feedbackStartTime;    // When current feedback started
@@ -122,6 +131,12 @@ private:
      * @param totalItems Total number of items available
      */
     void applySelectionToRing(int selectedIndex, int totalItems);
+
+    /**
+     * Apply special party cycle display showing all effect colors
+     * Used when the party cycle effect (index 0 in party mode) is selected
+     */
+    void applyPartyCycleDisplay();
 
     /**
      * Get color for a specific item index using full hue spectrum
