@@ -622,9 +622,9 @@ void EmeraldCityEffect::applyCoreWaveEffect() {
     // Calculate segment length (core strip divided into 3 equal segments)
     int segmentLength = LED_STRIP_CORE_COUNT / 3;
 
-    // Reset wave position for shorter gaps between waves
-    // Instead of waiting for full wave + length, reset sooner for more frequent waves
-    if (coreWavePosition > segmentLength + (CORE_WAVE_LENGTH * 0.3f)) {
+    // Reset wave position only after it fully exits the strip
+    // Allow wave to completely travel through and exit before starting new wave
+    if (coreWavePosition > segmentLength + CORE_WAVE_LENGTH) {
         coreWavePosition = -CORE_WAVE_LENGTH;  // Start from before the beginning
     }
 
@@ -673,10 +673,10 @@ void EmeraldCityEffect::applyCoreWaveEffect() {
                     physicalIndex = segmentStartIndex + physicalIndex;
                 }
 
-                // Create blue-green wave color
-                uint8_t red = (uint8_t)(30 * waveIntensity);    // Slight red tint
-                uint8_t green = (uint8_t)(180 * waveIntensity); // Strong green
-                uint8_t blue = (uint8_t)(255 * waveIntensity);  // Full blue
+                // Create emerald green wave color (more green, less blue)
+                uint8_t red = (uint8_t)(20 * waveIntensity);    // Minimal red tint
+                uint8_t green = (uint8_t)(255 * waveIntensity); // Full green (emerald)
+                uint8_t blue = (uint8_t)(120 * waveIntensity);  // Reduced blue for emerald tone
 
                 // Set the LED color (overwrites any existing color for this effect)
                 leds.getCore()[physicalIndex] = CRGB(red, green, blue);
@@ -684,7 +684,6 @@ void EmeraldCityEffect::applyCoreWaveEffect() {
         }
     }
 }
-
 uint8_t EmeraldCityEffect::getRandomGreenHue() {
     // Return a random green hue from the palette
     return greenHues[random(6)];  // 6 green hues in the palette
