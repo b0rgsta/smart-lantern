@@ -79,11 +79,11 @@ private:
     static const int DROP_CREATE_CHANCE = 15;  // Higher chance per frame to create new drop (out of 100)
     static const int SPLASH_FRAMES = 12;       // Longer splash duration
 
-    // Physics parameters for realistic water movement (slower speeds)
-    static constexpr float MIN_START_SPEED = 0.02f;   // Slowest initial drop speed (much slower)
-    static constexpr float MAX_START_SPEED = 0.08f;   // Fastest initial drop speed (much slower)
-    static constexpr float GRAVITY = 0.005f;          // How much drops accelerate each frame (less gravity)
-    static constexpr float MAX_SPEED = 0.3f;          // Terminal velocity (much slower max speed)
+    // Physics parameters for realistic water movement (NOT USED - see .cpp file for actual values)
+    static constexpr float MIN_START_SPEED = 0.02f;   // Placeholder - actual values in createNewDrop()
+    static constexpr float MAX_START_SPEED = 0.08f;   // Placeholder - actual values in createNewDrop()
+    static constexpr float GRAVITY = 0.005f;          // Placeholder - actual values in createNewDrop()
+    static constexpr float MAX_SPEED = 0.3f;          // Placeholder - actual values in updateDrop()
 
     /**
      * Fill all LEDs with a dim background water color
