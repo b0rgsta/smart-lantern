@@ -20,12 +20,12 @@ SuspendedFireEffect::SuspendedFireEffect(LEDController& ledController)
 
     // Initialize flame height arrays
     for (int i = 0; i < NUM_INNER_STRIPS; i++) {
-        innerFlameHeights[i] = 0.75f;  // Start at 75% height (increased from 60%)
-        innerHeightTargets[i] = 0.75f;
+        innerFlameHeights[i] = 0.8f;   // Start at 80% height (inner strips higher)
+        innerHeightTargets[i] = 0.8f;
     }
     for (int i = 0; i < NUM_OUTER_STRIPS; i++) {
-        outerFlameHeights[i] = 0.8f;   // Start at 80% height (increased from 60%)
-        outerHeightTargets[i] = 0.8f;
+        outerFlameHeights[i] = 0.75f;  // Start at 75% height (outer strips shorter)
+        outerHeightTargets[i] = 0.75f;
     }
 
     lastUpdateTime = millis();
@@ -406,17 +406,17 @@ void SuspendedFireEffect::updateFlameHeights() {
 
         // Update inner strip flame heights with individual variation
         for (int i = 0; i < NUM_INNER_STRIPS; i++) {
-            // Generate new random target height between 55% and 95% (increased by ~15%)
-            float minHeight = 0.55f;
-            float maxHeight = 0.95f;
+            // Generate new random target height between 60% and 100% (inner strips go higher)
+            float minHeight = 0.60f;
+            float maxHeight = 1.0f;
             innerHeightTargets[i] = minHeight + (random(0, 100) / 100.0f) * (maxHeight - minHeight);
         }
 
         // Update outer strip flame heights with individual variation
         for (int i = 0; i < NUM_OUTER_STRIPS; i++) {
-            // Generate new random target height between 60% and 100% (increased by ~15%)
-            float minHeight = 0.60f;
-            float maxHeight = 1.0f;
+            // Generate new random target height between 55% and 95% (outer strips are shorter)
+            float minHeight = 0.55f;
+            float maxHeight = 0.95f;
             outerHeightTargets[i] = minHeight + (random(0, 100) / 100.0f) * (maxHeight - minHeight);
         }
     }
