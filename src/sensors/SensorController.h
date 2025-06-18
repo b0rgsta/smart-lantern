@@ -52,6 +52,17 @@ public:
     bool isTOFWorking() const { return tofInitialized; }
 
 private:
+    // Add these method declarations to the private section of SensorController class in SensorController.h
+
+private:
+    // ... existing private members ...
+
+    // MPR121 initialization and recovery methods
+    bool initializeMPR121WithRetries();     // Robust initialization with retries
+    void configureMPR121Sensitivity();     // Configure sensor sensitivity settings
+    bool recoverMPR121();                  // Runtime recovery if sensor fails
+
+    // ... rest of existing private members ...
     // Hardware sensor objects
     Adafruit_MPR121 touchSensor;
     Adafruit_AHTX0 tempSensor;

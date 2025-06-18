@@ -30,19 +30,127 @@ SensorController::SensorController() :
     }
 }
 
+bool SensorController::initializeMPR121WithRetries() {
+    const int MAX_RETRIES = 5;           // Try up to 5 times
+    const int RETRY_DELAY_MS = 500;      // Wait 500ms between retries
+    const int STABILIZATION_DELAY_MS = 100; // Wait for sensor to stabilize after init
+
+    Serial.println("=== INITIALIZING MPR121 TOUCH SENSOR ===");
+
+    for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        Serial.print("MPR121 initialization attempt ");
+        Serial.print(attempt);
+        Serial.print(" of ");
+        Serial.println(MAX_RETRIES);
+
+        // Small delay before each attempt (except first)
+        if (attempt > 1) {
+            delay(RETRY_DELAY_MS);
+        }
+
+        // Try to initialize the sensor
+        if (touchSensor.begin(MPR121_I2C_ADDR)) {
+            Serial.println("✓ MPR121 hardware initialization successful");
+
+            // Give the sensor time to stabilize
+            delay(STABILIZATION_DELAY_MS);
+
+            // Verify the sensor is actually working by reading touch states
+            uint16_t testTouch = touchSensor.touched();
+            Serial.print("Initial touch state reading: 0x");
+            Serial.println(testTouch, HEX);
+
+            // Configure sensor sensitivity (optional - helps with reliability)
+            configureMPR121Sensitivity();
+
+            // Do a few test reads to ensure stability
+            bool stable = true;
+            for (int i = 0; i < 3; i++) {
+                uint16_t touch1 = touchSensor.touched();
+                delay(10);
+                uint16_t touch2 = touchSensor.touched();
+
+                // Check if readings are consistent (allowing for natural touch changes)
+                if (touch1 == 0xFFFF || touch2 == 0xFFFF) {
+                    Serial.println("WARNING: Sensor returning invalid data");
+                    stable = false;
+                    break;
+                }
+            }
+
+            if (stable) {
+                Serial.println("✓ MPR121 touch sensor initialized and verified!");
+                return true;
+            } else {
+                Serial.println("✗ MPR121 sensor unstable, retrying...");
+            }
+        } else {
+            Serial.print("✗ MPR121 initialization failed on attempt ");
+            Serial.println(attempt);
+        }
+    }
+
+    Serial.println("ERROR: MPR121 failed to initialize after all retries!");
+    Serial.println("Check wiring:");
+    Serial.println("  - VCC to 3.3V");
+    Serial.println("  - GND to GND");
+    Serial.println("  - SDA to GPIO 2");
+    Serial.println("  - SCL to GPIO 1");
+    Serial.print("  - I2C Address should be 0x");
+    Serial.println(MPR121_I2C_ADDR, HEX);
+
+    return false;
+}
+
+void SensorController::configureMPR121Sensitivity() {
+    // Configure touch and release thresholds for better reliability
+    // Lower touch threshold = more sensitive
+    // Higher release threshold = less likely to false trigger
+
+    for (uint8_t channel = 0; channel < 12; channel++) {
+        // The Adafruit MPR121 library only takes 2 parameters: touch and release
+        touchSensor.setThresholds(12,  // Touch threshold (lower = more sensitive)
+                                 6);   // Release threshold (should be lower than touch)
+    }
+
+    Serial.println("✓ MPR121 sensitivity configured");
+}
+
+bool SensorController::recoverMPR121() {
+    Serial.println("Attempting MPR121 recovery...");
+
+    // Try a simple re-initialization
+    if (touchSensor.begin(MPR121_I2C_ADDR)) {
+        delay(100); // Stabilization delay
+        configureMPR121Sensitivity();
+
+        // Test if it's working
+        uint16_t testTouch = touchSensor.touched();
+        if (testTouch != 0xFFFF) {
+            Serial.println("✓ MPR121 recovery successful");
+            return true;
+        }
+    }
+
+    Serial.println("✗ MPR121 recovery failed");
+    return false;
+}
+
 bool SensorController::begin() {
     bool allSensorsInitialized = true;
     bool criticalSensorsOK = true;  // Track only critical sensors
 
     Serial.println("=== INITIALIZING SENSORS ===");
 
-    // Initialize MPR121 touch sensor (CRITICAL)
-    if (!touchSensor.begin(MPR121_I2C_ADDR)) {
-        Serial.println("MPR121 not found, check wiring!");
+    // Initialize I2C bus with a small delay to ensure stability
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+    delay(100); // Give I2C bus time to stabilize
+
+    // Initialize MPR121 touch sensor (CRITICAL) - using robust method
+    if (!initializeMPR121WithRetries()) {
+        Serial.println("CRITICAL: MPR121 touch sensor failed to initialize!");
         allSensorsInitialized = false;
         criticalSensorsOK = false;  // Touch sensor is critical
-    } else {
-        Serial.println("✓ MPR121 touch sensor initialized");
     }
 
     // Initialize AHT10 temperature sensor (NON-CRITICAL)
@@ -68,7 +176,8 @@ bool SensorController::begin() {
     // Initialize TOF sensor (NON-CRITICAL)
     Serial.println("Initializing VL53L0X TOF sensor...");
     if (!tofSensor.begin()) {
-        Serial.println("ERROR: VL53L0X not found! Check wiring:");
+        Serial.println("ERROR: VL53L0X not found!");
+        Serial.println("Check wiring:");
         Serial.println("  - VCC to 3.3V");
         Serial.println("  - GND to GND");
         Serial.println("  - SDA to GPIO 2");
@@ -105,7 +214,7 @@ bool SensorController::begin() {
     // Print summary
     Serial.println("=== SENSOR INITIALIZATION SUMMARY ===");
     Serial.print("Touch Sensor (MPR121): ");
-    Serial.println(touchSensor.begin(MPR121_I2C_ADDR) ? "OK" : "FAILED");
+    Serial.println(criticalSensorsOK ? "OK" : "FAILED");
     Serial.print("Temperature Sensor (AHT10): ");
     Serial.println(tempSensor.begin() ? "OK" : "FAILED");
     Serial.print("Gyroscope (BMI160): ");
@@ -116,34 +225,28 @@ bool SensorController::begin() {
     Serial.print(LIGHT_SENSOR_PIN);
     Serial.println(")");
 
-    // Start sensor task if critical sensors are OK (touch sensor)
-    // We don't need ALL sensors to work, just the critical ones
+    // Start the sensor task only if critical sensors are working
     if (criticalSensorsOK) {
-        Serial.println("=== STARTING DUAL-CORE OPERATION ===");
-        Serial.println("Core 1: LED effects and main logic");
-        Serial.println("Core 0: Sensor processing task");
+        Serial.println("Starting sensor task on core 0...");
+        sensorTaskRunning = true;
 
-        if (!allSensorsInitialized) {
-            Serial.println("NOTE: Some non-critical sensors failed, but system will continue");
-        }
-
-        // Create the sensor task and pin it to core 0
-        BaseType_t taskCreated = xTaskCreatePinnedToCore(
+        // Create the sensor task on core 0
+        BaseType_t result = xTaskCreatePinnedToCore(
             sensorTaskWrapper,      // Function to run
-            "SensorTask",           // Task name for debugging
-            4096,                   // Stack size (4KB should be plenty)
-            this,                   // Parameter to pass (this object)
-            1,                      // Priority (1 = low priority, good for background tasks)
+            "SensorTask",           // Task name
+            4096,                   // Stack size (bytes)
+            this,                   // Parameter to pass to function
+            1,                      // Task priority (1 = low priority)
             &sensorTaskHandle,      // Task handle
-            0                       // Pin to core 0 (core 1 runs main loop)
+            0                       // Core 0 (core 1 runs main loop)
         );
 
-        if (taskCreated == pdPASS) {
-            sensorTaskRunning = true;
-            Serial.println("✓ Sensor task created successfully on core 0");
-        } else {
+        if (result != pdPASS) {
             Serial.println("ERROR: Failed to create sensor task!");
+            sensorTaskRunning = false;
             criticalSensorsOK = false;
+        } else {
+            Serial.println("✓ Sensor task started successfully on core 0");
         }
     } else {
         Serial.println("ERROR: Critical sensors failed - cannot start sensor task!");
@@ -153,11 +256,9 @@ bool SensorController::begin() {
 }
 
 // Static wrapper function required by FreeRTOS
-// This just calls the actual member function
 void SensorController::sensorTaskWrapper(void* parameter) {
     // Cast the parameter back to SensorController object
     SensorController* sensor = static_cast<SensorController*>(parameter);
-
     // Call the actual sensor processing function
     sensor->sensorTaskFunction();
 }
@@ -197,7 +298,6 @@ void SensorController::sensorTaskFunction() {
         }
 
         // Small delay to prevent task from hogging the CPU
-        // This also allows other tasks on core 0 to run if needed
         vTaskDelay(pdMS_TO_TICKS(10)); // 10ms delay = 100Hz update rate
     }
 
@@ -206,13 +306,9 @@ void SensorController::sensorTaskFunction() {
     vTaskDelete(NULL); // Delete this task
 }
 
-// The main update function now just checks if the sensor task is running
-// All actual sensor processing happens on core 0
 void SensorController::update() {
     // This function is called from core 1 (main loop)
-    // But all the actual sensor processing happens on core 0
-    // So we don't need to do anything here except maybe check task health
-
+    // All actual sensor processing happens on core 0
     // Optional: Check if sensor task is still running
     if (sensorTaskHandle && eTaskGetState(sensorTaskHandle) == eDeleted) {
         Serial.println("WARNING: Sensor task has stopped unexpectedly!");
@@ -239,11 +335,10 @@ void SensorController::stopSensorTask() {
 }
 
 // === THREAD-SAFE ACCESS FUNCTIONS ===
-// These functions are called from core 1 but access data updated on core 0
 
 bool SensorController::isTouched(int channel) const {
     bool result = false;
-    if (takeMutex(touchMutex, pdMS_TO_TICKS(10))) { // 10ms timeout
+    if (takeMutex(touchMutex, pdMS_TO_TICKS(10))) {
         result = (currentTouchState & (1 << channel));
         giveMutex(touchMutex);
     }
@@ -334,48 +429,105 @@ int SensorController::getBrightnessFromDistance() {
     // Convert mm to cm for easier calculation
     double distanceCm = distance / 10.0;
 
-    // Apply your brightness mapping:
-    // 0-10cm = OFF (brightness 0)
-    // 10-60cm = 0-100% (linear mapping)
-    // 60-80cm = 100% (full brightness)
-    // 80cm+ = ignore (return -1)
-
     if (distanceCm <= 10.0) {
-        // 0-10cm: OFF
-        return 0;
+        return 0; // 0-10cm: OFF
     }
     if (distanceCm <= 60.0) {
         // 10-60cm: Linear mapping from 0% to 100%
-        // At 10cm = 0%, at 60cm = 100%
         double brightness = (distanceCm - 10.0) / (60.0 - 10.0) * 100.0;
         return static_cast<int>(brightness);
     }
     if (distanceCm <= 80.0) {
-        // 60-80cm: Full brightness (100%)
-        return 100;
+        return 100; // 60-80cm: Full brightness (100%)
     }
-    // 80cm+: Ignore (no hand detected)
-    return -1;
+    return -1; // 80cm+: Ignore (no hand detected)
 }
 
 bool SensorController::isHandDetected() {
     int brightness = getBrightnessFromDistance();
-    // Hand is detected if we get a valid brightness value (not -1)
-    return brightness != -1;
+    return brightness != -1; // Hand is detected if we get a valid brightness value
 }
 
-// Static function - doesn't need mutex protection since it's a direct hardware read
 int SensorController::getLightLevel() {
     return analogRead(LIGHT_SENSOR_PIN);
+}
+
+void SensorController::enableTOFDebugging(bool enable) {
+    tofDebugEnabled = enable;
+    if (enable) {
+        Serial.println("TOF debugging enabled");
+    } else {
+        Serial.println("TOF debugging disabled");
+    }
+}
+
+void SensorController::printTOFStatus() {
+    if (!tofInitialized) {
+        Serial.println("TOF: Not initialized");
+        return;
+    }
+
+    int distance = getDistance();
+    int brightness = getBrightnessFromDistance();
+    bool handDetected = isHandDetected();
+
+    Serial.print("TOF: Distance=");
+    Serial.print(distance);
+    Serial.print("mm, Brightness=");
+    Serial.print(brightness);
+    Serial.print("%, Hand=");
+    Serial.println(handDetected ? "YES" : "NO");
 }
 
 // === SENSOR UPDATE FUNCTIONS (run on core 0) ===
 
 void SensorController::updateTouchSensor() {
-    if (takeMutex(touchMutex, pdMS_TO_TICKS(5))) {
+    static unsigned long lastSuccessfulRead = 0;
+    static int consecutiveFailures = 0;
+    const int MAX_CONSECUTIVE_FAILURES = 5;
+    const unsigned long RECOVERY_TIMEOUT_MS = 30000; // 30 seconds
+
+    if (takeMutex(touchMutex, pdMS_TO_TICKS(10))) {
+        // Store previous state before updating
         previousTouchState = currentTouchState;
-        currentTouchState = touchSensor.touched();
+
+        // Read current touch state
+        uint16_t rawTouch = touchSensor.touched();
+
+        // Check for invalid readings (sensor malfunction indicator)
+        if (rawTouch == 0xFFFF) {
+            consecutiveFailures++;
+            Serial.print("MPR121 read failure #");
+            Serial.println(consecutiveFailures);
+
+            // If too many failures, attempt recovery
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                Serial.println("Too many MPR121 failures, attempting recovery...");
+
+                if (recoverMPR121()) {
+                    consecutiveFailures = 0;
+                    lastSuccessfulRead = millis();
+                } else {
+                    // If recovery fails, wait before trying again
+                    delay(1000);
+                }
+            }
+        } else {
+            // Successful read
+            currentTouchState = rawTouch;
+            consecutiveFailures = 0;
+            lastSuccessfulRead = millis();
+        }
+
         giveMutex(touchMutex);
+    }
+
+    // Additional safeguard: if no successful reads for too long, force recovery
+    unsigned long timeSinceLastSuccess = millis() - lastSuccessfulRead;
+    if (timeSinceLastSuccess > RECOVERY_TIMEOUT_MS) {
+        Serial.println("MPR121 timeout - forcing recovery attempt");
+        recoverMPR121();
+        lastSuccessfulRead = millis(); // Reset timer regardless of success
     }
 }
 
@@ -384,7 +536,6 @@ void SensorController::updateTemperatureSensor() {
     tempSensor.getEvent(&humidity, &temp);
 
     if (takeMutex(tempMutex, pdMS_TO_TICKS(5))) {
-        // Store values in cache
         cachedTemperature = temp.temperature;
         cachedHumidity = humidity.relative_humidity;
         giveMutex(tempMutex);
@@ -394,121 +545,47 @@ void SensorController::updateTemperatureSensor() {
 void SensorController::updateIMU() {
     imu.update();
 
-    AccelData newAccelData;
-    GyroData newGyroData;
-    imu.getAccel(&newAccelData);
-    imu.getGyro(&newGyroData);
-
     if (takeMutex(imuMutex, pdMS_TO_TICKS(5))) {
-        accelData = newAccelData;
-        gyroData = newGyroData;
+        imu.getAccel(&accelData);
+        imu.getGyro(&gyroData);
         giveMutex(imuMutex);
     }
 }
 
 void SensorController::updateTOF() {
-    // Only try to update if sensor was initialized properly
     if (!tofInitialized) {
-        return;
+        return; // Don't try to read if sensor isn't working
     }
 
     VL53L0X_RangingMeasurementData_t measure;
     tofSensor.rangingTest(&measure, false);
 
     if (takeMutex(tofMutex, pdMS_TO_TICKS(5))) {
-        if (measure.RangeStatus != 4) {
-            // Valid measurement
+        if (measure.RangeStatus != 4) { // Status 4 means out of range
             lastValidDistance = measure.RangeMilliMeter;
-            consecutiveFailures = 0; // Reset failure counter
+            consecutiveFailures = 0;
         } else {
-            // Invalid measurement
             consecutiveFailures++;
-            // Keep lastValidDistance as is, don't overwrite with invalid data
-        }
-        giveMutex(tofMutex);
-    }
-}
-
-// === TOF DEBUGGING FUNCTIONS ===
-
-void SensorController::enableTOFDebugging(bool enable) {
-    tofDebugEnabled = enable;
-    if (enable) {
-        Serial.println("=== TOF DEBUGGING ENABLED ===");
-        Serial.println("Distance readings will be printed every second");
-        Serial.println("Use this to calibrate your hand positions:");
-        Serial.println("  - Hold hand at different distances");
-        Serial.println("  - Note the readings for close/far positions");
-        Serial.println("  - Check for consistent readings");
-        Serial.println("================================");
-    } else {
-        Serial.println("TOF debugging disabled");
-    }
-}
-
-void SensorController::printTOFStatus() {
-    if (!tofInitialized) {
-        Serial.println("TOF: SENSOR NOT INITIALIZED");
-        return;
-    }
-
-    // Get thread-safe copies of the data
-    int distance = -1;
-    int failures = 0;
-
-    if (takeMutex(tofMutex, pdMS_TO_TICKS(10))) {
-        distance = lastValidDistance;
-        failures = consecutiveFailures;
-        giveMutex(tofMutex);
-    }
-
-    int brightness = getBrightnessFromDistance();
-
-    Serial.print("TOF: ");
-
-    if (distance == -1) {
-        Serial.print("OUT OF RANGE");
-        if (failures > 1) {
-            Serial.print(" (");
-            Serial.print(failures);
-            Serial.print(" consecutive failures)");
-        }
-    } else {
-        Serial.print(distance);
-        Serial.print("mm (");
-        Serial.print(distance / 10.0, 1);
-        Serial.print("cm)");
-
-        // Show brightness mapping
-        if (brightness == -1) {
-            Serial.print(" -> IGNORED (too far)");
-        } else {
-            Serial.print(" -> Brightness: ");
-            Serial.print(brightness);
-            Serial.print("%");
-
-            // Give user feedback about distance ranges with brightness info
-            if (brightness == 0) {
-                Serial.print(" (OFF - too close)");
-            } else if (brightness < 50) {
-                Serial.print(" (DIM)");
-            } else if (brightness < 100) {
-                Serial.print(" (BRIGHT)");
-            } else {
-                Serial.print(" (MAX BRIGHTNESS)");
+            // If too many consecutive failures, invalidate distance
+            if (consecutiveFailures > 10) {
+                lastValidDistance = -1;
             }
         }
+        giveMutex(tofMutex);
     }
-
-    Serial.println();
 }
 
-// === MUTEX HELPER FUNCTIONS ===
+// === HELPER FUNCTIONS ===
 
 bool SensorController::takeMutex(SemaphoreHandle_t mutex, TickType_t timeout) const {
+    if (mutex == nullptr) {
+        return false;
+    }
     return xSemaphoreTake(mutex, timeout) == pdTRUE;
 }
 
 void SensorController::giveMutex(SemaphoreHandle_t mutex) const {
-    xSemaphoreGive(mutex);
+    if (mutex != nullptr) {
+        xSemaphoreGive(mutex);
+    }
 }

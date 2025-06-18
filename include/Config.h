@@ -4,6 +4,7 @@
 
 #ifndef CONFIG_H
 #define CONFIG_H
+
 // Pin Definitions
 #define LED_STRIP_CORE_PIN    7  // Connected to ESP32 GPIO 7
 #define LED_STRIP_INNER_PIN   6  // Connected to ESP32 GPIO 6
@@ -36,10 +37,10 @@
 
 // Timing Parameters (in milliseconds)
 #define POWER_BUTTON_HOLD_TIME    2000  // 2 seconds to turn off
-#define LIGHT_THRESHOLD_TIME      3000 // 3 seconds before auto-on
-#define AUTO_OFF_TIME             5000 // 4 hours auto-off time
-#define DIMMING_START_TIME        3500 // 3.5 hours (when dimming starts)
-#define DIMMING_DURATION          1500 // 30 minutes dimming duration
+#define LIGHT_THRESHOLD_TIME      3000  // 3 seconds before auto-on
+#define AUTO_OFF_TIME             5000  // 4 hours auto-off time
+#define DIMMING_START_TIME        3500  // 3.5 hours (when dimming starts)
+#define DIMMING_DURATION          1500  // 30 minutes dimming duration
 
 // Temperature Thresholds (in Celsius)
 #define TEMP_THRESHOLD_RED        18.0  // Red LED on at 18°C or below
@@ -55,13 +56,11 @@
 #define TOF_MIN_DISTANCE          50   // Minimum distance in mm
 #define TOF_MAX_DISTANCE          300  // Maximum distance in mm
 
-// I2C Addresses
-#define MPR121_I2C_ADDR           0x5A
-#define AHT10_I2C_ADDR            0x38
-#define BMI160_I2C_ADDR           0x68
-#define TOF_I2C_ADDR              0x29
-
-// Updated LED strip configuration
+// I2C Sensor Addresses
+#define MPR121_I2C_ADDR           0x5A  // MPR121 touch sensor
+#define AHT10_I2C_ADDR            0x38  // AHT10 temperature/humidity sensor (auto-detected)
+#define BMI160_I2C_ADDR           0x68  // BMI160 gyroscope/accelerometer
+#define TOF_I2C_ADDR              0x29  // VL53L0X time-of-flight sensor
 
 // Color definitions with names
 #define COLOR_RED     0xFF0000  // Pure Red
@@ -74,5 +73,6 @@
 #define COLOR_ORANGE  0xFF8000  // Orange
 #define COLOR_PINK    0xFF0080  // Pink
 #define COLOR_LIME    0x80FF00  // Lime
+// Note: COLOR_NONE is defined in effect files where needed
 
 #endif //CONFIG_H
