@@ -5,19 +5,19 @@
 // Timing constants - FASTER AND SMOOTHER
 static constexpr unsigned long FLICKER_UPDATE_INTERVAL = 60; // Faster updates (every 60ms instead of 120ms)
 
-// Global flicker parameters (affects whole lamp) - FASTER AND SMOOTHER
-static constexpr float GLOBAL_MIN_INTENSITY = 0.7f;       // Minimum global brightness (70%)
-static constexpr float GLOBAL_MAX_INTENSITY = 1.2f;       // Maximum global brightness (120%)
-static constexpr float GLOBAL_BRIGHT_INTENSITY = 1.4f;    // Rare bright flickers (140%)
-static constexpr int GLOBAL_FLICKER_CHANCE = 40;          // 40% chance to change global (more frequent)
-static constexpr int GLOBAL_BRIGHT_FLICKER_CHANCE = 10;   // 10% chance for bright global flicker
-static constexpr float GLOBAL_SMOOTH_FACTOR = 0.18f;      // How quickly global flicker changes (much faster)
+// Global flicker parameters (affects whole lamp) - MORE NOTICEABLE FLICKERING
+static constexpr float GLOBAL_MIN_INTENSITY = 0.5f;       // Lower minimum (was 0.7f) for more dramatic dips
+static constexpr float GLOBAL_MAX_INTENSITY = 1.3f;       // Higher maximum (was 1.2f) for brighter peaks
+static constexpr float GLOBAL_BRIGHT_INTENSITY = 1.6f;    // Much brighter rare flickers (was 1.4f)
+static constexpr int GLOBAL_FLICKER_CHANCE = 50;          // More frequent global changes (was 40%)
+static constexpr int GLOBAL_BRIGHT_FLICKER_CHANCE = 15;   // More frequent bright flickers (was 10%)
+static constexpr float GLOBAL_SMOOTH_FACTOR = 0.25f;      // Faster transitions (was 0.18f)
 
-// Zone flicker parameters (subtle variations on top of global) - FASTER AND SMOOTHER
-static constexpr float ZONE_BASE_INTENSITY = 1.0f;        // Base zone intensity
-static constexpr float ZONE_VARIATION_RANGE = 0.4f;       // ±20% variation range
-static constexpr int ZONE_FLICKER_CHANCE = 35;            // 35% chance to change zones (more frequent)
-static constexpr float ZONE_SMOOTH_FACTOR = 0.15f;        // How quickly zones change (much faster)
+// Zone flicker parameters (subtle variations on top of global) - MORE NOTICEABLE
+static constexpr float ZONE_BASE_INTENSITY = 1.0f;
+static constexpr float ZONE_VARIATION_RANGE = 0.6f;       // Larger variation range (was 0.4f)
+static constexpr int ZONE_FLICKER_CHANCE = 45;            // More frequent zone changes (was 35%)
+static constexpr float ZONE_SMOOTH_FACTOR = 0.20f;        // Faster zone transitions (was 0.15f)
 
 // Overall candle parameters - BRIGHTER BASE
 static constexpr float BASE_BRIGHTNESS = 1.0f;            // Overall candle brightness (full brightness)
@@ -38,7 +38,7 @@ CandleFlickerEffect::CandleFlickerEffect(LEDController& ledController) :
     secondaryFlameTarget(1.1f),         // Slightly brighter middle target
     baseGlowTarget(1.3f)                // Much brighter base target
 {
-    // Initialize base candle color (warm 1800K)
+    // Initialize base candle color (warm enhanced color)
     baseColor = getCandleColor();
 
     Serial.println("CandleFlickerEffect initialized - smooth global flicker with gentle zones");
@@ -243,24 +243,13 @@ void CandleFlickerEffect::applyCandleFlameAndFadeToOuter() {
 }
 
 CRGB CandleFlickerEffect::getCandleColor() {
-    // 1800K candle temperature color calculation
-    // Based on blackbody radiation curve for warm candle light
+    // Enhanced warm candle color - more orange/amber, less green/yellow
+    // Real candle flames are more orange-dominant than the calculated 1800K
 
-    // Candle light is very warm with dominant red/orange
-    float temp = 1800.0f / 100.0f; // Temperature in hundreds of Kelvin
-
-    float red, green, blue;
-
-    // For very warm temperatures (candle), red is always maximum
-    red = 255;
-
-    // Calculate green component for 1800K
-    green = temp;
-    green = 99.4708025861f * log(green) - 161.1195681661f;
-    green = constrain(green, 0, 255);
-
-    // Blue is very minimal for warm candle light
-    blue = 0; // At 1800K, blue component is essentially zero
+    // Warmer, more orange-dominant candle color
+    float red = 255;              // Full red for warmth
+    float green = 85;             // Reduced green (was ~120) for less yellow, more orange
+    float blue = 15;              // Slight blue for realistic flame undertones
 
     return CRGB((uint8_t)red, (uint8_t)green, (uint8_t)blue);
 }

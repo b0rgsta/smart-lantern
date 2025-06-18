@@ -9,27 +9,40 @@ SuspendedPartyFireEffect::SuspendedPartyFireEffect(LEDController& ledController)
     ringBreathingPhase(0.0f),             // Start breathing cycle at beginning
     ringIntensity(0.05f),                 // Start at minimum intensity
     lastRingUpdate(0),                    // Initialize timing
-    nextSpeedChange(0)                    // Initialize speed change timing
+    nextSpeedChange(0),                   // Initialize speed change timing
+    currentBreathingSpeed(0.006f),         // Start with slower breathing speed
+    peakIntensity(0.85f),                  // Start with 85% peak intensity
+    lastPeakChange(0)                     // Initialize peak change timing
 {
-    // Initialize timing variables - NO SPEED CHANGE TIMING
+    // Initialize timing variables
     lastCoreUpdate = millis();
+    lastRingUpdate = millis();
+    nextSpeedChange = millis() + 3000;    // First speed change in 3 seconds
+    lastPeakChange = millis();
 
-    Serial.println("SuspendedPartyFireEffect created - suspended fire with FLIPPED core glow and simple ring breathing");
+    Serial.println("SuspendedPartyFireEffect created - suspended fire with FLIPPED core glow and slower, brighter ring breathing");
 }
 
 void SuspendedPartyFireEffect::reset() {
     // Reset the base suspended fire effect first
     SuspendedFireEffect::reset();
 
-    // Reset party-specific animations - NO SPEED CHANGES
+    // Reset party-specific animations
     coreGlowIntensity = 0.8f;
     ringBreathingPhase = 0.0f;
-    ringIntensity = 0.05f;
+    ringIntensity = 0.25f;                // Start at higher minimum intensity
 
-    // Reset timing - no speed change timing
+    // Reset new enhanced ring breathing variables
+    currentBreathingSpeed = 0.006f;       // Start with slower speed
+    peakIntensity = 0.85f;                // Start with higher peak
+
+    // Reset timing
     lastCoreUpdate = millis();
+    lastRingUpdate = millis();
+    nextSpeedChange = millis() + 3000;    // First speed change in 3 seconds
+    lastPeakChange = millis();
 
-    Serial.println("SuspendedPartyFireEffect reset - core and ring restarted");
+    Serial.println("SuspendedPartyFireEffect reset - core and slower, brighter ring restarted");
 }
 
 void SuspendedPartyFireEffect::update() {
@@ -110,25 +123,58 @@ void SuspendedPartyFireEffect::updateRingBreathing() {
         return;
     }
 
-    // Fixed slow breathing speed - no random changes, no bursts
-    static float fixedBreathingSpeed = 0.01f;
+    unsigned long currentTime = millis();
+
+    // Check if it's time to randomly change breathing speed (every 3-6 seconds)
+    if (currentTime >= nextSpeedChange) {
+        // Generate new random breathing speed (slower range for more relaxed breathing)
+        currentBreathingSpeed = 0.002f + (random(100) / 10000.0f); // 0.002 to 0.012 (slower)
+
+        // Set next speed change time with random interval (3-6 seconds)
+        nextSpeedChange = currentTime + 3000 + random(3000);
+
+        Serial.print("Ring breathing speed changed to: ");
+        Serial.println(currentBreathingSpeed, 4);
+    }
 
     // Always update the breathing phase for smooth animation
-    ringBreathingPhase += fixedBreathingSpeed;
+    ringBreathingPhase += currentBreathingSpeed;
 
     // Keep phase within 0 to 2*PI range
     if (ringBreathingPhase > 2.0f * PI) {
         ringBreathingPhase -= 2.0f * PI;
     }
 
-    // Calculate breathing intensity using sine wave
+    // Create smoother breathing curve with randomized peaks
     float sineValue = sin(ringBreathingPhase);      // -1.0 to 1.0
     float normalizedSine = (sineValue + 1.0f) / 2.0f;  // 0.0 to 1.0
 
-    // Map to intensity range (5% to 20% for very dim base)
-    ringIntensity = 0.05f + (normalizedSine * 0.15f);
+    // Apply smoothing function for more gradual transitions
+    float smoothedSine = normalizedSine * normalizedSine * (3.0f - 2.0f * normalizedSine); // Smoothstep
 
-    // Apply the glow to the ring strip - NO OTHER MODIFICATIONS
+    // Create random peak heights (every few breathing cycles, change the peak intensity)
+    if (currentTime - lastPeakChange > 4000 + random(3000)) { // Every 4-7 seconds
+        peakIntensity = 0.75f + (random(25) / 100.0f); // Random peak between 75% and 100% (higher minimum)
+        lastPeakChange = currentTime;
+    }
+
+    // Map to intensity range with higher minimum (25% minimum to random peak maximum)
+    ringIntensity = 0.25f + (smoothedSine * (peakIntensity - 0.25f));
+
+    // Add subtle random flicker only occasionally (not every frame)
+    if (currentTime - lastRingUpdate >= RING_UPDATE_INTERVAL) {
+        lastRingUpdate = currentTime;
+
+        // Apply gentle random variation for organic fire feeling
+        float flicker = (random(100) / 100.0f) * 0.08f - 0.04f; // ±4% flicker (reduced from ±7.5%)
+        ringIntensity += flicker;
+
+        // Keep intensity within valid range
+        if (ringIntensity < 0.0f) ringIntensity = 0.0f;
+        if (ringIntensity > 1.0f) ringIntensity = 1.0f;
+    }
+
+    // Apply the glow to the ring strip
     applyRingGlow(ringIntensity);
 }
 

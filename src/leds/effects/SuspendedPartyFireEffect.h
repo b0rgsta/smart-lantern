@@ -14,7 +14,7 @@
  *   (flames hang downward from the top, red base at top, darker smoke at bottom)
  * - Core strip: Deep red glow that fades to black at the BOTTOM (flipped from PartyFireEffect)
  *   This creates upward heat glow effect that complements the downward flames
- * - Ring strip: Simple dim breathing red glow (no bursts, no speed changes)
+ * - Ring strip: Enhanced random breathing red glow with smooth transitions and random peaks
  *
  * The core animation direction is flipped to create upward glow while the fire hangs down,
  * creating a unique visual effect where heat appears to rise while flames descend.
@@ -54,7 +54,12 @@ private:
     float ringBreathingPhase;       // Current phase of breathing cycle (0.0 to 2*PI)
     float ringIntensity;            // Current breathing intensity (0.0 to 1.0)
     unsigned long lastRingUpdate;   // Last time ring breathing was updated
-    unsigned long nextSpeedChange;  // When to change breathing speed next (unused but kept for compatibility)
+    unsigned long nextSpeedChange;  // When to change breathing speed next
+
+    // Enhanced ring breathing animation variables for random and smooth effects
+    float currentBreathingSpeed;    // Current breathing speed (changes randomly)
+    float peakIntensity;           // Current peak breathing intensity (randomized)
+    unsigned long lastPeakChange;  // Last time peak intensity was changed
 
     // Core color definitions
     static constexpr uint32_t CORE_DEEP_RED = 0x8B0000;    // Deep red color for core base
@@ -75,8 +80,8 @@ private:
     void updateCoreGlow();
 
     /**
-     * Update the ring breathing effect (simple breathing, no bursts)
-     * Creates simple breathing red glow
+     * Update the ring breathing effect with enhanced randomness and smoothness
+     * Creates random breathing red glow with varying speeds and peak intensities
      */
     void updateRingBreathing();
 
