@@ -461,13 +461,19 @@ void MatrixEffect::drawRingTrails() {
             uint8_t brightness = (uint8_t)(255 * trailAlpha * globalAlpha);
 
             if (brightness > 0) {
-                // Convert hue to RGB
-                CHSV hsvColor(trail.hue, 255, brightness);
-                CRGB rgbColor;
-                hsv2rgb_rainbow(hsvColor, rgbColor);
+                CRGB segmentColor;
+
+                if (i == 0) {
+                    // Head of trail - colored (like drop heads on other strips)
+                    CHSV hsvColor(trail.hue, 255, brightness);
+                    hsv2rgb_rainbow(hsvColor, segmentColor);
+                } else {
+                    // Trail segments - white (consistent with other strips)
+                    segmentColor = CRGB(brightness, brightness, brightness);
+                }
 
                 // Add to existing ring LED (additive blending for overlapping trails)
-                leds.getRing()[ledIndex] += rgbColor;
+                leds.getRing()[ledIndex] += segmentColor;
             }
         }
     }
