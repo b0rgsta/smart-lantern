@@ -18,6 +18,7 @@
 #include "leds/effects/FutureRainbowEffect.h"
 #include "leds/effects/RgbPatternEffect.h"
 #include "leds/effects/EmeraldCityEffect.h"
+#include "leds/effects/SuspendedFireEffect.h"
 
 SmartLantern::SmartLantern() :
     buttonFeedback(leds),
@@ -78,6 +79,7 @@ void SmartLantern::initializeEffects() {
         false   // ring disabled
     );
     auto fireEffect = new FireEffect(leds);
+    auto suspendedFireEffect = new SuspendedFireEffect(leds);
     auto matrixEffect = new MatrixEffect(leds);
     auto waterfallEffect = new WaterfallEffect(leds);
     auto coreGrowEffect = new CodeRedEffect(leds);
@@ -179,6 +181,7 @@ void SmartLantern::initializeEffects() {
 
     // MODE_ANIMATED
     effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
+    effects[MODE_ANIMATED].push_back(suspendedFireEffect);
     effects[MODE_ANIMATED].push_back(emeraldCityEffect); // Add Emerald City effect
     effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
