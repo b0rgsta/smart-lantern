@@ -184,12 +184,12 @@ void SmartLantern::initializeEffects() {
     // MODE_ANIMATED
     effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
     effects[MODE_ANIMATED].push_back(suspendedFireEffect);
-    effects[MODE_ANIMATED].push_back(emeraldCityEffect); // Add Emerald City effect
     effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
     effects[MODE_ANIMATED].push_back(partyRippleEffect);
 
     // MODE_PARTY
+    effects[MODE_PARTY].push_back(emeraldCityEffect); // Add Emerald City effect
     effects[MODE_PARTY].push_back(suspendedPartyFireEffect);
     effects[MODE_PARTY].push_back(coreGrowEffect); // Core ripple
     effects[MODE_PARTY].push_back(matrixEffect); // Matrix

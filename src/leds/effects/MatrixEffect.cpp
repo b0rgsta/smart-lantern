@@ -184,7 +184,7 @@ void MatrixEffect::createDrop(int stripType, int subStrip) {
 
             drop.brightness = 255;
             drop.isActive = true;
-            drop.isWhite = (random(100) < WHITE_FLASH_CHANCE); // Small chance to start as white
+            drop.isWhite = false; // No sparkle effects - always start as colored
             return;
         }
     }
@@ -227,7 +227,7 @@ void MatrixEffect::updateStrip(int stripType, int subStrip) {
             // Update position
             drop.position -= drop.speed;
 
-            // Random chance to flicker
+            // Random chance to flicker (brightness only)
             if (random(100) < FLICKER_CHANCE) {
                 drop.brightness = 255 - random(FLICKER_INTENSITY);
             } else {
@@ -237,12 +237,7 @@ void MatrixEffect::updateStrip(int stripType, int subStrip) {
                 }
             }
 
-            // Random chance to flash white
-            if (!drop.isWhite && random(100) < WHITE_FLASH_CHANCE) {
-                drop.isWhite = true;
-            } else if (drop.isWhite && random(100) < 50) {
-                drop.isWhite = false;
-            }
+            // No sparkle effects - removed white flash logic
 
             // Deactivate if offscreen
             if (drop.position < -TRAIL_LENGTH) {
@@ -257,7 +252,7 @@ void MatrixEffect::updateStrip(int stripType, int subStrip) {
 }
 
 void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int stripLength) {
-    // Draw the head of the drop
+    // Draw the head of the drop (colored, can flicker)
     int headPos = (int) drop.position;
     if (headPos >= 0 && headPos < stripLength) {
         // Map the logical position to physical LED
@@ -265,47 +260,41 @@ void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int strip
 
         // For core strips, adjust for segment offset
         if (stripType == 0) {
-            // Core
+            // Core - 3 segments
             int segmentLength = LED_STRIP_CORE_COUNT / 3;
             physicalPos += subStrip * segmentLength;
         } else if (stripType == 1) {
-            // Inner
+            // Inner strips
             physicalPos += subStrip * INNER_LEDS_PER_STRIP;
         } else if (stripType == 2) {
-            // Outer
+            // Outer strips
             physicalPos += subStrip * OUTER_LEDS_PER_STRIP;
         }
 
-        // Set the color
-        CRGB color;
-        if (drop.isWhite) {
-            // White flash
-            uint8_t whiteBright = max(drop.brightness, WHITE_FLASH_MIN);
-            color = CRGB(whiteBright, whiteBright, whiteBright);
-        } else {
-            // Colored drop - use HSV with the drop's assigned hue
-            CHSV hsvColor(drop.hue, 255, drop.brightness); // Full saturation
-            hsv2rgb_rainbow(hsvColor, color);
-        }
+        // Set the head color (colored drops only - no sparkles)
+        CRGB headColor;
+        // Colored drop with flicker - use HSV with the drop's assigned hue
+        CHSV hsvColor(drop.hue, 255, drop.brightness); // This uses flickering brightness
+        hsv2rgb_rainbow(hsvColor, headColor);
 
-        // Set pixel based on strip type
+        // Set the head pixel
         switch (stripType) {
             case 0: // Core
-                leds.getCore()[physicalPos] = color;
+                leds.getCore()[physicalPos] = headColor;
                 break;
             case 1: // Inner
-                leds.getInner()[physicalPos] = color;
+                leds.getInner()[physicalPos] = headColor;
                 break;
             case 2: // Outer
-                leds.getOuter()[physicalPos] = color;
+                leds.getOuter()[physicalPos] = headColor;
                 break;
             case 3: // Ring
-                leds.getRing()[physicalPos] = color;
+                leds.getRing()[physicalPos] = headColor;
                 break;
         }
     }
 
-    // Draw the trailing fade with white colors
+    // Draw the trailing fade (white trails - steady brightness)
     for (uint8_t i = 1; i <= TRAIL_LENGTH; i++) {
         int trailPos = headPos + i;
 
@@ -315,25 +304,26 @@ void MatrixEffect::renderDrop(Drop &drop, int stripType, int subStrip, int strip
 
             // Adjust for segment offset
             if (stripType == 0) {
-                // Core
+                // Core - 3 segments
                 int segmentLength = LED_STRIP_CORE_COUNT / 3;
                 physicalPos += subStrip * segmentLength;
             } else if (stripType == 1) {
-                // Inner
+                // Inner strips
                 physicalPos += subStrip * INNER_LEDS_PER_STRIP;
             } else if (stripType == 2) {
-                // Outer
+                // Outer strips
                 physicalPos += subStrip * OUTER_LEDS_PER_STRIP;
             }
 
-            // Calculate trail brightness (decreasing quadratically)
-            uint8_t trailBright = ((TRAIL_LENGTH - i) * (TRAIL_LENGTH - i) * TRAIL_BRIGHTNESS) /
-                                  (TRAIL_LENGTH * TRAIL_LENGTH);
+            // Calculate trail brightness (smooth fade - no flicker)
+            // Use quadratic fade for smooth trail appearance
+            float fadeRatio = (float)(TRAIL_LENGTH - i) / (float)TRAIL_LENGTH;
+            uint8_t trailBright = (uint8_t)(fadeRatio * fadeRatio * TRAIL_BRIGHTNESS);
 
-            // Set trail pixel (white with decreasing brightness)
-            CRGB trailColor(trailBright, trailBright, trailBright);
+            // Trail color - white trails (classic Matrix look)
+            CRGB trailColor = CRGB(trailBright, trailBright, trailBright);
 
-            // Set pixel based on strip type
+            // Set trail pixel
             switch (stripType) {
                 case 0: // Core
                     leds.getCore()[physicalPos] = trailColor;
@@ -428,54 +418,57 @@ void MatrixEffect::drawRingTrails() {
     for (const auto& trail : ringTrails) {
         if (!trail.active) continue;
 
-        // Calculate trail age and fade multiplier
+        // Calculate trail age for fade in/out effects
         unsigned long trailAge = currentTime - trail.creationTime;
-        float trailFadeMultiplier = 1.0f;
+        float globalAlpha = 1.0f;
 
-        // Apply gradual fade-in during first RING_TRAIL_FADEIN period
+        // Handle fade in/out phases
         if (trailAge < RING_TRAIL_FADEIN) {
-            trailFadeMultiplier = (float)trailAge / RING_TRAIL_FADEIN;
+            // Fade in phase
+            globalAlpha = (float)trailAge / RING_TRAIL_FADEIN;
+        } else if (trailAge >= RING_TRAIL_FADEIN + RING_TRAIL_LIFESPAN) {
+            // Fade out phase
+            unsigned long fadeoutTime = trailAge - RING_TRAIL_FADEIN - RING_TRAIL_LIFESPAN;
+            if (fadeoutTime < RING_TRAIL_FADEOUT) {
+                globalAlpha = 1.0f - ((float)fadeoutTime / RING_TRAIL_FADEOUT);
+            } else {
+                globalAlpha = 0.0f; // Completely faded
+            }
         }
-        // Apply gradual fade-out after RING_TRAIL_FADEIN + RING_TRAIL_LIFESPAN
-        else if (trailAge > RING_TRAIL_FADEIN + RING_TRAIL_LIFESPAN) {
-            unsigned long fadeAge = trailAge - RING_TRAIL_FADEIN - RING_TRAIL_LIFESPAN;
-            trailFadeMultiplier = 1.0f - ((float)fadeAge / RING_TRAIL_FADEOUT);
-            trailFadeMultiplier = max(0.0f, trailFadeMultiplier); // Ensure non-negative
-        }
-        // Full brightness during middle period
-        // (trailFadeMultiplier remains 1.0f)
 
-        // Draw the trail with fading effect
+        if (globalAlpha <= 0.0f) continue; // Skip if completely faded
+
+        // Draw trail segments
         for (int i = 0; i < trail.trailLength; i++) {
-            // Calculate position for this segment of the trail
+            // Calculate position of this trail segment (working backwards from head)
             float segmentPos = trail.position - i;
 
-            // Handle wraparound
-            while (segmentPos < 0) segmentPos += LED_STRIP_RING_COUNT;
-            while (segmentPos >= LED_STRIP_RING_COUNT) segmentPos -= LED_STRIP_RING_COUNT;
+            // Handle ring wraparound
+            while (segmentPos < 0) {
+                segmentPos += LED_STRIP_RING_COUNT;
+            }
+            while (segmentPos >= LED_STRIP_RING_COUNT) {
+                segmentPos -= LED_STRIP_RING_COUNT;
+            }
 
             int ledIndex = (int)segmentPos;
 
-            // Calculate brightness fade (head is brightest, tail fades out)
-            float fadeRatio = 1.0f - ((float)i / trail.trailLength);
-            fadeRatio = fadeRatio * fadeRatio; // Square for exponential fade
+            // Calculate segment brightness (fade along trail length)
+            float trailAlpha = (float)(trail.trailLength - i) / (float)trail.trailLength;
+            trailAlpha = trailAlpha * trailAlpha; // Quadratic fade for smoother appearance
 
-            // Apply overall trail fade multiplier
-            fadeRatio *= trailFadeMultiplier;
+            // Combine global fade with trail fade
+            uint8_t brightness = (uint8_t)(255 * trailAlpha * globalAlpha);
 
-            CRGB color;
-            if (i == 0) {
-                // Head of trail - use the colored hue
-                CHSV hsvColor(trail.hue, 255, 255 * fadeRatio);
-                hsv2rgb_rainbow(hsvColor, color);
-            } else {
-                // Trail segments - white with decreasing brightness
-                uint8_t whiteBright = 255 * fadeRatio * TRAIL_BRIGHTNESS / 255; // Scale by TRAIL_BRIGHTNESS
-                color = CRGB(whiteBright, whiteBright, whiteBright);
+            if (brightness > 0) {
+                // Convert hue to RGB
+                CHSV hsvColor(trail.hue, 255, brightness);
+                CRGB rgbColor;
+                hsv2rgb_rainbow(hsvColor, rgbColor);
+
+                // Add to existing ring LED (additive blending for overlapping trails)
+                leds.getRing()[ledIndex] += rgbColor;
             }
-
-            // Blend with existing color (for overlapping trails)
-            leds.getRing()[ledIndex] += color;
         }
     }
 }
