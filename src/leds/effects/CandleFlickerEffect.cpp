@@ -135,9 +135,20 @@ void CandleFlickerEffect::updateFlickerIntensities() {
 }
 
 void CandleFlickerEffect::applyCandleFlameToInner() {
-    // Apply flame zones to each inner strip segment
+    // Apply flame zones to each inner strip segment with center-fade effect
     for (int segment = 0; segment < NUM_INNER_STRIPS; segment++) {
         int segmentStart = segment * INNER_LEDS_PER_STRIP;
+
+        // Calculate segment fade factor for center-to-side gradient
+        // Segment 1 (middle) = full intensity, segments 0 and 2 (sides) = reduced
+        float segmentFadeFactor;
+        if (segment == 1) {
+            // Center segment - strongest glow
+            segmentFadeFactor = 1.0f;
+        } else {
+            // Side segments - reduced intensity for fade effect
+            segmentFadeFactor = 0.6f;  // 60% intensity on sides
+        }
 
         for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
             int ledIndex = segmentStart + i;
@@ -165,8 +176,8 @@ void CandleFlickerEffect::applyCandleFlameToInner() {
                                mainFlameIntensity * blendFactor;
             }
 
-            // Apply GLOBAL flicker on top of zone intensity
-            float finalIntensity = BASE_BRIGHTNESS * globalFlickerIntensity * zoneIntensity;
+            // Apply GLOBAL flicker, zone intensity, AND segment fade
+            float finalIntensity = BASE_BRIGHTNESS * globalFlickerIntensity * zoneIntensity * segmentFadeFactor;
 
             // Apply intensity to base candle color
             CRGB flickeredColor = CRGB(
@@ -181,9 +192,20 @@ void CandleFlickerEffect::applyCandleFlameToInner() {
 }
 
 void CandleFlickerEffect::applyCandleFlameAndFadeToOuter() {
-    // Apply flame zones with fade to each outer strip segment
+    // Apply flame zones with fade to each outer strip segment with center-fade effect
     for (int segment = 0; segment < NUM_OUTER_STRIPS; segment++) {
         int segmentStart = segment * OUTER_LEDS_PER_STRIP;
+
+        // Calculate segment fade factor for center-to-side gradient
+        // Segment 1 (middle) = full intensity, segments 0 and 2 (sides) = reduced
+        float segmentFadeFactor;
+        if (segment == 1) {
+            // Center segment - strongest glow
+            segmentFadeFactor = 1.0f;
+        } else {
+            // Side segments - reduced intensity for fade effect
+            segmentFadeFactor = 0.6f;  // 60% intensity on sides
+        }
 
         for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
             int ledIndex = segmentStart + i;
@@ -227,8 +249,8 @@ void CandleFlickerEffect::applyCandleFlameAndFadeToOuter() {
                 fadeBrightness = 0.0f;
             }
 
-            // Combine GLOBAL flicker, zone intensity, and fade effects
-            float finalBrightness = BASE_BRIGHTNESS * globalFlickerIntensity * zoneIntensity * fadeBrightness;
+            // Combine GLOBAL flicker, zone intensity, fade effects, AND segment fade
+            float finalBrightness = BASE_BRIGHTNESS * globalFlickerIntensity * zoneIntensity * fadeBrightness * segmentFadeFactor;
 
             // Apply combined brightness to base candle color
             CRGB finalColor = CRGB(
