@@ -139,6 +139,8 @@ void LustEffect::updateCoreBreathing(float intensity, uint32_t hotColor, uint32_
 
 void LustEffect::updateInnerBreathing(float intensity, uint32_t hotColor, uint32_t coolColor) {
     // Inner has opposing gradient wave, but each of the 3 strips shows the same pattern
+    // Add 15% offset to create phase difference from core/outer strips
+    float offsetGradient = gradientOffset + (WAVE_LENGTH * 0.15f);
     CRGB* innerStrip = leds.getInner();
 
     // Apply the same gradient pattern to each of the 3 inner strips
@@ -147,15 +149,15 @@ void LustEffect::updateInnerBreathing(float intensity, uint32_t hotColor, uint32
 
         for (int i = 0; i < INNER_LEDS_PER_STRIP; i++) {
             int ledIndex = segmentStart + i;
-            // Use local position 'i' instead of global position 'ledIndex'
-            // so all 3 strips show the same pattern (but reversed direction)
-            innerStrip[ledIndex] = getGradientWaveColor(i, gradientOffset, intensity, true, hotColor, coolColor);
+            // Use local position 'i' with offset gradient (but still reversed direction)
+            innerStrip[ledIndex] = getGradientWaveColor(i, offsetGradient, intensity, true, hotColor, coolColor);
         }
     }
 }
 
 void LustEffect::updateOuterBreathing(float intensity, uint32_t hotColor, uint32_t coolColor) {
     // Outer has same gradient wave as core, but each of the 3 strips shows the same pattern
+    // Plus fade to black overlay from bottom to top
     CRGB* outerStrip = leds.getOuter();
 
     // Apply the same gradient pattern to each of the 3 outer strips
@@ -164,9 +166,22 @@ void LustEffect::updateOuterBreathing(float intensity, uint32_t hotColor, uint32
 
         for (int i = 0; i < OUTER_LEDS_PER_STRIP; i++) {
             int ledIndex = segmentStart + i;
+
+            // Get the base gradient color
+            CRGB baseColor = getGradientWaveColor(i, gradientOffset, intensity, false, hotColor, coolColor);
+
+            // Calculate fade factor (0.0 at top, 1.0 at bottom)
+            float fadePosition = (float)i / (float)(OUTER_LEDS_PER_STRIP - 1);
+            float fadeFactor = 1.0f - fadePosition; // 1.0 at bottom (i=0), 0.0 at top (i=max)
+
+            // Apply fade to black by scaling the color components
+            baseColor.r = (uint8_t)(baseColor.r * fadeFactor);
+            baseColor.g = (uint8_t)(baseColor.g * fadeFactor);
+            baseColor.b = (uint8_t)(baseColor.b * fadeFactor);
+
             // Use local position 'i' instead of global position 'ledIndex'
-            // so all 3 strips show the same pattern
-            outerStrip[ledIndex] = getGradientWaveColor(i, gradientOffset, intensity, false, hotColor, coolColor);
+            // so all 3 strips show the same pattern with fade overlay
+            outerStrip[ledIndex] = baseColor;
         }
     }
 }

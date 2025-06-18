@@ -64,7 +64,7 @@ private:
     static constexpr unsigned long COLOR_SET_CYCLE = 16000; // Color set transition cycle (16 seconds - doubled)
 
     // Gradient animation constants
-    static constexpr float GRADIENT_SPEED = 0.096f;         // Speed of gradient wave movement (40% slower)
+    static constexpr float GRADIENT_SPEED = 0.1152f;        // Speed of gradient wave movement (20% faster)
     static constexpr float WAVE_LENGTH = 50.0f;             // Length of one complete gradient wave (longer for smoother)
 
     // Breathing animation variables
