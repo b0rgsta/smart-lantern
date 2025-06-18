@@ -134,9 +134,9 @@ void SmartLantern::initializeEffects() {
         false   // Ring off
     );
 
-    effects[MODE_AMBIENT].push_back(candleEffect);
     effects[MODE_AMBIENT].push_back(incandescent);
     effects[MODE_AMBIENT].push_back(daylight);
+    effects[MODE_AMBIENT].push_back(candleEffect);
 
     // Gradient effects for gradient mode
     // 1. Purple-Blue opposing gradients (inner purple→blue, outer blue→purple, others off)
@@ -186,8 +186,8 @@ void SmartLantern::initializeEffects() {
         Gradient()
     );
 
-    effects[MODE_GRADIENT].push_back(purpleBlueOpposingGradient);
     effects[MODE_GRADIENT].push_back(sunsetGradient);
+    effects[MODE_GRADIENT].push_back(purpleBlueOpposingGradient);
     effects[MODE_GRADIENT].push_back(splitRainbowGradient);
     effects[MODE_GRADIENT].push_back(christmasGradient);
 
@@ -205,18 +205,19 @@ void SmartLantern::initializeEffects() {
 
     // Create vector of individual party effects for cycling
     std::vector<Effect*> partyEffectsForCycling;
+    partyEffectsForCycling.push_back(coreGrowEffect);
     partyEffectsForCycling.push_back(lustEffect);
     partyEffectsForCycling.push_back(emeraldCityEffect);
-    partyEffectsForCycling.push_back(suspendedPartyFireEffect);
-    partyEffectsForCycling.push_back(coreGrowEffect);
-    partyEffectsForCycling.push_back(matrixEffect);
-    partyEffectsForCycling.push_back(technoOrangeEffect);
     partyEffectsForCycling.push_back(rainbowTranceEffect);
-    //partyEffectsForCycling.push_back(partyFireEffect);
-    partyEffectsForCycling.push_back(rainbowEffect);
-    partyEffectsForCycling.push_back(futureEffect);
-    partyEffectsForCycling.push_back(futureRainbowEffect);
     partyEffectsForCycling.push_back(rgbPatternEffect);
+    partyEffectsForCycling.push_back(futureEffect);
+    partyEffectsForCycling.push_back(rainbowEffect);
+    partyEffectsForCycling.push_back(technoOrangeEffect);
+    partyEffectsForCycling.push_back(futureRainbowEffect);
+    partyEffectsForCycling.push_back(matrixEffect);
+    //partyEffectsForCycling.push_back(partyFireEffect);
+    partyEffectsForCycling.push_back(suspendedPartyFireEffect);
+
 
     Serial.println("Created " + String(partyEffectsForCycling.size()) + " individual party effects");
 
