@@ -613,52 +613,74 @@ void EmeraldCityEffect::applyOuterFadeOverlay() {
 }
 
 void EmeraldCityEffect::applyCoreWaveEffect() {
-    // Apply blue-green wave effect to core strip
-    // Creates a large wave that moves across the entire core strip
+    // Apply a large blue wave that moves across each core segment uniformly
+    // Each of the 3 core segments displays the same wave pattern
 
     // Update wave position
     coreWavePosition += CORE_WAVE_SPEED;
 
-    // Wrap around when wave reaches the end
-    if (coreWavePosition >= LED_STRIP_CORE_COUNT + CORE_WAVE_LENGTH) {
+    // Calculate segment length (core strip divided into 3 equal segments)
+    int segmentLength = LED_STRIP_CORE_COUNT / 3;
+
+    // Reset wave position for shorter gaps between waves
+    // Instead of waiting for full wave + length, reset sooner for more frequent waves
+    if (coreWavePosition > segmentLength + (CORE_WAVE_LENGTH * 0.3f)) {
         coreWavePosition = -CORE_WAVE_LENGTH;  // Start from before the beginning
     }
 
-    // Apply wave to each LED in the core strip
-    for (int i = 0; i < LED_STRIP_CORE_COUNT; i++) {
-        // Calculate distance from current LED to wave center
-        float distanceFromWave = abs((float)i - coreWavePosition);
+    // Apply the same wave pattern to all 3 core segments
+    for (int segment = 0; segment < 3; segment++) {
+        int segmentStartIndex = segment * segmentLength;
 
-        // Calculate wave intensity based on distance
-        float waveIntensity = 0.0f;
-        if (distanceFromWave <= CORE_WAVE_LENGTH / 2.0f) {
-            // LED is within the wave - calculate intensity using sine wave
-            float normalizedDistance = distanceFromWave / (CORE_WAVE_LENGTH / 2.0f);  // 0.0 to 1.0
-            waveIntensity = cos(normalizedDistance * PI / 2.0f);  // Cosine gives smooth wave shape
+        // Apply the wave to each LED in this segment
+        for (int i = 0; i < segmentLength; i++) {
+            // Calculate distance from this LED to the wave center (within this segment)
+            float distanceFromWaveCenter = abs((float)i - coreWavePosition);
 
-            // Apply edge fade for smoother wave boundaries
-            float edgeFade = 1.0f;
-            if (normalizedDistance > 0.7f) {
-                // Fade out more aggressively near edges
-                float edgeDistance = (normalizedDistance - 0.7f) / 0.3f;  // 0.0 to 1.0
-                edgeFade = 1.0f - (edgeDistance * edgeDistance);  // Quadratic fade
+            // Calculate wave intensity with fade in/out (center is brightest)
+            float waveIntensity = 0.0f;
+            if (distanceFromWaveCenter < CORE_WAVE_LENGTH / 2) {
+                // Use cosine wave for smooth bell curve (center brightest, edges fade out)
+                float normalizedDistance = distanceFromWaveCenter / (CORE_WAVE_LENGTH / 2.0f);
+                waveIntensity = cos(normalizedDistance * PI / 2.0f);  // Cosine gives smooth fade
+
+                // Apply additional fade-in/fade-out at wave edges for smoother appearance
+                float edgeFade = 1.0f;
+                if (normalizedDistance > 0.7f) {
+                    edgeFade = 1.0f - ((normalizedDistance - 0.7f) / 0.3f);
+                }
+                waveIntensity *= edgeFade;
+
+                // Apply maximum brightness setting
+                waveIntensity *= CORE_WAVE_BRIGHTNESS;
+
+                // Ensure we don't exceed maximum
+                waveIntensity = constrain(waveIntensity, 0.0f, 1.0f);
             }
 
-            waveIntensity *= edgeFade;  // Apply edge fade
-            waveIntensity *= CORE_WAVE_BRIGHTNESS;
-        }
+            // Apply the wave color to this LED if intensity > 0
+            if (waveIntensity > 0.0f) {
+                // Calculate actual LED index in the core array
+                int ledIndex = segmentStartIndex + i;
 
-        // Apply the wave color to the LED
-        if (waveIntensity > 0.01f) {  // Small threshold to avoid very dim pixels
-            CHSV waveHSV(CORE_WAVE_HUE, 255, (uint8_t)(255 * waveIntensity));
-            CRGB waveColor;
-            hsv2rgb_rainbow(waveHSV, waveColor);
+                // Map logical position to physical position for this segment
+                int physicalIndex = leds.mapPositionToPhysical(0, i, segment);
+                if (segment == 0 || segment == 2) {
+                    // Segments A and C use direct mapping
+                    physicalIndex = segmentStartIndex + physicalIndex;
+                } else {
+                    // Segment B (middle) is flipped, so use the mapped position
+                    physicalIndex = segmentStartIndex + physicalIndex;
+                }
 
-            // Set the core LED
-            leds.getCore()[i] = waveColor;
-        } else {
-            // Turn off LED when not in wave
-            leds.getCore()[i] = CRGB::Black;
+                // Create blue-green wave color
+                uint8_t red = (uint8_t)(30 * waveIntensity);    // Slight red tint
+                uint8_t green = (uint8_t)(180 * waveIntensity); // Strong green
+                uint8_t blue = (uint8_t)(255 * waveIntensity);  // Full blue
+
+                // Set the LED color (overwrites any existing color for this effect)
+                leds.getCore()[physicalIndex] = CRGB(red, green, blue);
+            }
         }
     }
 }

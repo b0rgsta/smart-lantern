@@ -185,7 +185,6 @@ void SmartLantern::initializeEffects() {
     effects[MODE_GRADIENT].push_back(christmasGradient);
 
     // MODE_ANIMATED
-    effects[MODE_ANIMATED].push_back(fireEffect); // Fire effect
     effects[MODE_ANIMATED].push_back(suspendedFireEffect);
     effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
@@ -206,7 +205,7 @@ void SmartLantern::initializeEffects() {
     partyEffectsForCycling.push_back(matrixEffect);
     partyEffectsForCycling.push_back(technoOrangeEffect);
     partyEffectsForCycling.push_back(rainbowTranceEffect);
-    partyEffectsForCycling.push_back(partyFireEffect);
+    //partyEffectsForCycling.push_back(partyFireEffect);
     partyEffectsForCycling.push_back(rainbowEffect);
     partyEffectsForCycling.push_back(futureEffect);
     partyEffectsForCycling.push_back(futureRainbowEffect);
