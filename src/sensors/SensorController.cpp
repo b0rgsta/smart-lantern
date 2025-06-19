@@ -429,20 +429,17 @@ int SensorController::getBrightnessFromDistance() {
     // Convert mm to cm for easier calculation
     double distanceCm = distance / 10.0;
 
-    if (distanceCm <= 10.0) {
-        return 0; // 0-10cm: OFF
+    if (distanceCm < 10.0) {
+        return -1; // Below 10cm: Ignore (too close)
     }
-    if (distanceCm <= 60.0) {
-        // 10-60cm: Linear mapping from 0% to 100%
-        double brightness = (distanceCm - 10.0) / (60.0 - 10.0) * 100.0;
+    if (distanceCm <= 50.0) {
+        // 10-50cm: Linear mapping from 0% to 100%
+        // At 10cm = 0% brightness, at 50cm = 100% brightness
+        double brightness = (distanceCm - 10.0) / (50.0 - 10.0) * 100.0;
         return static_cast<int>(brightness);
     }
-    if (distanceCm <= 80.0) {
-        return 100; // 60-80cm: Full brightness (100%)
-    }
-    return -1; // 80cm+: Ignore (no hand detected)
+    return -1; // 50cm+: Ignore (no hand detected)
 }
-
 bool SensorController::isHandDetected() {
     int brightness = getBrightnessFromDistance();
     return brightness != -1; // Hand is detected if we get a valid brightness value

@@ -271,8 +271,10 @@ Gradient GradientEffect::createRainbowGradient(int numPoints) {
 
     for (int i = 0; i < numPoints; i++) {
         float position = (float) i / (numPoints - 1);
-        // Calculate hue (0-255) based on position
-        uint8_t hue = 255 * position;
+        // Skip green section: Start from hue 43 (yellow) and go to hue 171 (blue)
+        // This gives us yellow → orange → red → magenta → blue (skipping green)
+        float hueRange = 171 - 43; // 128 hue units
+        uint8_t hue = 43 + (position * hueRange);
         // Convert HSV to RGB (full saturation and value)
         CRGB rgbColor = CHSV(hue, 255, 255);
         // Convert to uint32_t format

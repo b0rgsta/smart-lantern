@@ -407,21 +407,16 @@ void SmartLantern::togglePower() {
 void SmartLantern::updateBrightnessFromTOF() {
     int distance = sensors.getDistance();
 
-    if (distance > 0) {
-        // Map distance to brightness (closer = brighter)
-        // Distance range: 50-800mm
-        // Brightness range: 77-255 (30%-100%)
-
+    if (distance != -1 && distance <= 500) {  // 50cm max range
         int brightness;
-        if (distance <= 50) {
+        if (distance <= 100) {  // 10cm - closest
             brightness = 255; // Max brightness when very close
-        } else if (distance >= 800) {
-            brightness = 77; // Min brightness when far
+        } else if (distance >= 500) {  // 50cm - farthest
+            brightness = 51; // Min brightness when far (20%)
         } else {
             // Linear mapping: closer distance = higher brightness
-            brightness = map(distance, 800, 50, 77, 255);
+            brightness = map(distance, 500, 100, 51, 255);
         }
-
         leds.setBrightness(brightness);
     }
     // If distance is -1 (no reading), don't change brightness
