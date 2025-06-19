@@ -22,6 +22,7 @@
 #include "leds/effects/SuspendedPartyFireEffect.h"
 #include "leds/effects/LustEffect.h"
 #include "leds/effects/PartyCycleEffect.h"
+#include "leds/effects/DarkEnergyEffect.h"
 
 SmartLantern::SmartLantern() :
     buttonFeedback(leds),
@@ -89,6 +90,7 @@ void SmartLantern::initializeEffects() {
     Gradient()                                       // Ring off
 );
     auto fireEffect = new FireEffect(leds);
+    auto darkenergyEffect = new DarkEnergyEffect(leds);
     auto suspendedFireEffect = new SuspendedFireEffect(leds);
     auto matrixEffect = new MatrixEffect(leds);
     auto waterfallEffect = new WaterfallEffect(leds);
@@ -192,6 +194,7 @@ void SmartLantern::initializeEffects() {
     effects[MODE_GRADIENT].push_back(christmasGradient);
 
     // MODE_ANIMATED
+    effects[MODE_ANIMATED].push_back(darkenergyEffect); // Full rainbow effect
     effects[MODE_ANIMATED].push_back(suspendedFireEffect);
     effects[MODE_ANIMATED].push_back(waterfallEffect); // Waterfall effect
     effects[MODE_ANIMATED].push_back(rainbowEffectNoCore); // Rainbow effect
